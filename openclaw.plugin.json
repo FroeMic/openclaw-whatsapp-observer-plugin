@@ -1,0 +1,44 @@
+{
+  "id": "whatsapp-pro",
+  "channels": ["whatsapp"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "observer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dbPath": {
+            "type": "string",
+            "description": "Path to SQLite database for observer messages"
+          },
+          "mediaPath": {
+            "type": "string",
+            "description": "Path to store downloaded media files"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "blocklist": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "E.164 numbers or JIDs to never log"
+              },
+              "allowlist": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "E.164 numbers or JIDs to log (\"*\" for all)"
+              }
+            }
+          },
+          "retentionDays": {
+            "type": "number",
+            "description": "Days to retain messages (0 = forever)"
+          }
+        }
+      }
+    }
+  }
+}
