@@ -45,20 +45,17 @@ openclaw config set plugins.entries.whatsapp-pro.enabled true
 
 if [ "$MODE" = "observer" ]; then
   # Add account to observer accounts list in plugin config
-  # Read current list, append if not already present
+  # Use node to safely build the JSON array
   CURRENT=$(openclaw config get plugins.entries.whatsapp-pro.config.observer.accounts 2>/dev/null || echo "[]")
-  if echo "$CURRENT" | grep -q "\"$ACCOUNT_ID\""; then
-    echo "Account '$ACCOUNT_ID' already in observer accounts list."
-  else
-    # Build new array by appending
-    if [ "$CURRENT" = "[]" ] || [ "$CURRENT" = "undefined" ] || [ -z "$CURRENT" ]; then
-      NEW_LIST="[\"$ACCOUNT_ID\"]"
-    else
-      # Remove trailing ] and append
-      NEW_LIST="${CURRENT%]}",\"$ACCOUNT_ID\"]"
-    fi
-    openclaw config set plugins.entries.whatsapp-pro.config.observer.accounts "$NEW_LIST"
-  fi
+  NEW_LIST=$(node -e "
+    let arr;
+    try { arr = JSON.parse(process.argv[1]); } catch { arr = []; }
+    if (!Array.isArray(arr)) arr = [];
+    const id = process.argv[2];
+    if (!arr.includes(id)) arr.push(id);
+    console.log(JSON.stringify(arr));
+  " "$CURRENT" "$ACCOUNT_ID")
+  openclaw config set plugins.entries.whatsapp-pro.config.observer.accounts "$NEW_LIST"
 fi
 
 echo ""
