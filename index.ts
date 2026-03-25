@@ -1,4 +1,4 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk/whatsapp";
+import { defineChannelPluginEntry } from "openclaw/plugin-sdk/core";
 import { whatsappPlugin, setObserverState } from "./src/channel.js";
 import { setWhatsAppRuntime } from "./src/runtime.js";
 import { parseObserverConfig } from "./src/observer-config.js";
@@ -6,100 +6,90 @@ import { ObserverDB } from "./src/observer/db.js";
 import { registerObserverTools } from "./src/observer/tools.js";
 import type { ObserverConfig } from "./src/observer/types.js";
 
+export { whatsappPlugin } from "./src/channel.js";
+export { setWhatsAppRuntime } from "./src/runtime.js";
+
 let observerDb: ObserverDB | null = null;
 let observerConfig: ObserverConfig | null = null;
 
-const plugin = {
+export default defineChannelPluginEntry({
   id: "whatsapp-pro",
   name: "WhatsApp Pro",
   description: "WhatsApp channel plugin with observer mode for passive message logging",
+  plugin: whatsappPlugin,
+  setRuntime: setWhatsAppRuntime,
 
-  register(api: OpenClawPluginApi) {
-    setWhatsAppRuntime(api.runtime);
-
-    // Check if original WhatsApp plugin already registered this channel
-    try {
-      api.registerChannel({ plugin: whatsappPlugin });
-    } catch (err) {
-      api.logger.error(
-        `[whatsapp-pro] Cannot register: channel "whatsapp" is already registered. ` +
-          `Disable the built-in WhatsApp plugin first: openclaw plugins disable whatsapp`,
-      );
-      return; // Graceful no-op — tools and hooks are NOT registered
-    }
-
-    // Initialize observer DB + register query tools
+  registerFull(api) {
     const config = parseObserverConfig(api.pluginConfig);
-    if (config) {
-      const dbPath = api.resolvePath(config.dbPath);
-      const mediaPath = api.resolvePath(config.mediaPath);
-      const resolvedConfig = { ...config, dbPath, mediaPath };
+    if (!config) return;
 
-      observerDb = new ObserverDB(dbPath);
-      observerConfig = resolvedConfig;
-      setObserverState(observerDb, resolvedConfig);
+    const dbPath = api.resolvePath(config.dbPath);
+    const mediaPath = api.resolvePath(config.mediaPath);
+    const resolvedConfig = { ...config, dbPath, mediaPath };
 
-      registerObserverTools(api, observerDb);
+    observerDb = new ObserverDB(dbPath);
+    observerConfig = resolvedConfig;
+    setObserverState(observerDb, resolvedConfig);
 
-      // Safety layer 3: block outbound on observer accounts even if somehow triggered
-      api.on(
-        "message_sending",
-        (event, ctx) => {
-          if (!ctx || (ctx as Record<string, unknown>).channelId !== "whatsapp") return;
-          const accountId = (ctx as Record<string, unknown>).accountId as string | undefined;
-          if (!accountId) return;
+    registerObserverTools(api, observerDb);
 
-          // Check if this account has observerMode enabled
-          const cfg = (ctx as Record<string, unknown>).config as Record<string, unknown> | undefined;
-          const waConfig = cfg?.channels as Record<string, unknown> | undefined;
-          const waAccounts = (waConfig?.whatsapp as Record<string, unknown>)?.accounts as
-            | Record<string, Record<string, unknown>>
-            | undefined;
-          const accountConfig = waAccounts?.[accountId];
+    // Log normal-path messages to the same DB
+    api.on("message_received", (event, ctx) => {
+      if (!ctx || !observerDb) return;
+      const hookCtx = ctx as Record<string, unknown>;
+      if (hookCtx.channelId !== "whatsapp") return;
+      const hookEvent = event as Record<string, unknown>;
+      const metadata = (hookEvent.metadata ?? {}) as Record<string, unknown>;
 
-          if (accountConfig?.observerMode) {
-            api.logger.warn(
-              `[whatsapp-pro] SAFETY: Blocked outbound message on observer account ${accountId}`,
-            );
-            return { cancel: true };
-          }
-        },
-        { priority: 9999 },
-      );
+      try {
+        observerDb.insertMessage({
+          messageId: (metadata.messageId as string) ?? undefined,
+          accountId: (hookCtx.accountId as string) ?? "unknown",
+          sender: hookEvent.from as string,
+          senderName: (metadata.senderName as string) ?? undefined,
+          senderE164: (metadata.senderE164 as string) ?? undefined,
+          conversationId: (hookCtx.conversationId as string) ?? (hookEvent.from as string),
+          isGroup: Boolean(metadata.isGroup),
+          groupName: (metadata.groupSubject as string) ?? undefined,
+          content: hookEvent.content as string,
+          timestamp: (hookEvent.timestamp as number) ?? Date.now(),
+          messageType: "message",
+          source: "pipeline",
+        });
+      } catch (err) {
+        api.logger.error(`[whatsapp-pro] Failed to log pipeline message: ${String(err)}`);
+      }
+    });
 
-      // Log normal-path messages to the same DB
-      api.on("message_received", (event, ctx) => {
+    // Safety layer: block outbound on observer accounts
+    api.on(
+      "message_sending",
+      (event, ctx) => {
         if (!ctx || !observerDb) return;
         const hookCtx = ctx as Record<string, unknown>;
         if (hookCtx.channelId !== "whatsapp") return;
-        const hookEvent = event as Record<string, unknown>;
-        const metadata = (hookEvent.metadata ?? {}) as Record<string, unknown>;
+        const accountId = hookCtx.accountId as string | undefined;
+        if (!accountId) return;
 
-        try {
-          observerDb.insertMessage({
-            messageId: (metadata.messageId as string) ?? undefined,
-            accountId: (hookCtx.accountId as string) ?? "unknown",
-            sender: hookEvent.from as string,
-            senderName: (metadata.senderName as string) ?? undefined,
-            senderE164: (metadata.senderE164 as string) ?? undefined,
-            conversationId: (hookCtx.conversationId as string) ?? (hookEvent.from as string),
-            isGroup: Boolean(metadata.isGroup),
-            groupName: (metadata.groupSubject as string) ?? undefined,
-            content: hookEvent.content as string,
-            timestamp: (hookEvent.timestamp as number) ?? Date.now(),
-            messageType: "message",
-            source: "pipeline",
-          });
-        } catch (err) {
-          api.logger.error(`[whatsapp-pro] Failed to log pipeline message: ${String(err)}`);
+        const cfg = hookCtx.config as Record<string, unknown> | undefined;
+        const waConfig = cfg?.channels as Record<string, unknown> | undefined;
+        const waAccounts = (waConfig?.whatsapp as Record<string, unknown>)?.accounts as
+          | Record<string, Record<string, unknown>>
+          | undefined;
+        const accountConfig = waAccounts?.[accountId];
+
+        if (accountConfig?.observerMode) {
+          api.logger.warn(
+            `[whatsapp-pro] SAFETY: Blocked outbound message on observer account ${accountId}`,
+          );
+          return { cancel: true };
         }
-      });
+      },
+      { priority: 9999 },
+    );
 
-      api.logger.info(
-        `[whatsapp-pro] Observer mode initialized (db: ${dbPath}, media: ${mediaPath})`,
-      );
-    }
+    api.logger.info(
+      `[whatsapp-pro] Observer mode initialized (db: ${dbPath}, media: ${mediaPath})`,
+    );
   },
-};
-
-export default plugin;
+});

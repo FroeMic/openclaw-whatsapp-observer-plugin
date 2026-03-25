@@ -5,9 +5,18 @@
   "description": "WhatsApp channel plugin with observer mode for passive message logging",
   "type": "module",
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.16",
+    "@whiskeysockets/baileys": "7.0.0-rc.9",
+    "jimp": "^1.6.0",
     "better-sqlite3": "^11.7.0",
     "@sinclair/typebox": "0.34.48"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.22"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
@@ -16,6 +25,7 @@
   "openclaw": {
     "extensions": [
       "./index.ts"
-    ]
+    ],
+    "setupEntry": "./setup-entry.ts"
   }
 }
