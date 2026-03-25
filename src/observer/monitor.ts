@@ -116,17 +116,24 @@ async function processObserverMessage(
     logger?: ChannelLogSink;
   },
 ): Promise<void> {
-  console.log("[observer-debug]", JSON.stringify(msg, null, 2));
-  const remoteJid = msg.key?.remoteJid;
+  // Resolve JID: prefer remoteJidAlt (E.164-based) when remoteJid uses LID format
+  const rawJid = msg.key?.remoteJid;
+  const altJid = (msg.key as Record<string, unknown>)?.remoteJidAlt as string | undefined;
+  const remoteJid = altJid && (altJid.endsWith("@s.whatsapp.net") || altJid.endsWith("@g.us"))
+    ? altJid
+    : rawJid;
   if (!remoteJid) return;
-  if (remoteJid.endsWith("@s.whatsapp.net") === false && remoteJid.endsWith("@g.us") === false) {
-    ctx.logger?.info(`Observer ${ctx.accountId}: skipping non-chat JID: ${remoteJid}`);
+  if (
+    !remoteJid.endsWith("@s.whatsapp.net") &&
+    !remoteJid.endsWith("@g.us") &&
+    !remoteJid.endsWith("@lid")
+  ) {
     return;
   }
 
   const isGroup = isJidGroup(remoteJid);
   const sender = isGroup ? (msg.key?.participant ?? remoteJid) : remoteJid;
-  const senderE164 = jidToE164(sender);
+  const senderE164 = jidToE164(sender) ?? jidToE164(altJid);
 
   // Apply blocklist/allowlist
   if (isBlocked(senderE164 ?? sender, remoteJid, ctx.config.filters)) return;
