@@ -132,8 +132,13 @@ async function processObserverMessage(
   if (!isAllowed(senderE164 ?? sender, remoteJid, ctx.config.filters)) return;
 
   const timestamp = ((msg.messageTimestamp as number) ?? 0) * 1000 || Date.now();
-  const normalized = normalizeMessageContent(
-    msg.message as import("@whiskeysockets/baileys").proto.IMessage | undefined,
+  const rawMessage = msg.message as import("@whiskeysockets/baileys").proto.IMessage | undefined;
+  const normalized = normalizeMessageContent(rawMessage);
+
+  ctx.logger?.info(
+    `Observer ${ctx.accountId}: received msg from ${senderE164 ?? sender}, ` +
+    `hasNormalized=${!!normalized}, hasRaw=${!!rawMessage}, ` +
+    `keys=${rawMessage ? Object.keys(rawMessage).join(",") : "none"}`,
   );
 
   // --- Reaction message ---
@@ -223,6 +228,7 @@ async function processObserverMessage(
       return;
     }
     // Other protocol messages (e.g. ephemeral settings) — skip
+    ctx.logger?.info(`Observer ${ctx.accountId}: skipping protocol message type=${protoMsg.type}`);
     return;
   }
 
