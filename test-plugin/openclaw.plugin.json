@@ -1,0 +1,8 @@
+{
+  "id": "test-tool-plugin",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
