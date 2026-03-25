@@ -6,10 +6,8 @@ const DEFAULT_RETENTION_DAYS = 90;
 
 export function parseObserverConfig(
   pluginConfig: Record<string, unknown> | undefined,
-): ObserverConfig | null {
-  if (!pluginConfig) return null;
-  const raw = pluginConfig.observer as Record<string, unknown> | undefined;
-  if (!raw) return null;
+): ObserverConfig {
+  const raw = (pluginConfig?.observer ?? {}) as Record<string, unknown>;
 
   const dbPath = typeof raw.dbPath === "string" ? raw.dbPath : DEFAULT_DB_PATH;
   const mediaPath = typeof raw.mediaPath === "string" ? raw.mediaPath : DEFAULT_MEDIA_PATH;

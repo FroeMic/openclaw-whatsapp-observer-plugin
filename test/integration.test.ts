@@ -5,12 +5,16 @@ import { registerObserverTools } from "../src/observer/tools.js";
 
 describe("Integration", () => {
   describe("parseObserverConfig", () => {
-    it("returns null when no plugin config", () => {
-      expect(parseObserverConfig(undefined)).toBeNull();
+    it("returns defaults when no plugin config", () => {
+      const config = parseObserverConfig(undefined);
+      expect(config.dbPath).toBe("~/.openclaw/whatsapp-observer/messages.db");
+      expect(config.retentionDays).toBe(90);
     });
 
-    it("returns null when no observer key", () => {
-      expect(parseObserverConfig({})).toBeNull();
+    it("returns defaults when no observer key", () => {
+      const config = parseObserverConfig({});
+      expect(config.dbPath).toBe("~/.openclaw/whatsapp-observer/messages.db");
+      expect(config.filters.allowlist).toEqual(["*"]);
     });
 
     it("parses minimal config with defaults", () => {
@@ -18,11 +22,11 @@ describe("Integration", () => {
         observer: {},
       });
       expect(config).not.toBeNull();
-      expect(config!.dbPath).toBe("~/.openclaw/whatsapp-observer/messages.db");
-      expect(config!.mediaPath).toBe("~/.openclaw/whatsapp-observer/media");
-      expect(config!.retentionDays).toBe(90);
-      expect(config!.filters.blocklist).toEqual([]);
-      expect(config!.filters.allowlist).toEqual(["*"]);
+      expect(config.dbPath).toBe("~/.openclaw/whatsapp-observer/messages.db");
+      expect(config.mediaPath).toBe("~/.openclaw/whatsapp-observer/media");
+      expect(config.retentionDays).toBe(90);
+      expect(config.filters.blocklist).toEqual([]);
+      expect(config.filters.allowlist).toEqual(["*"]);
     });
 
     it("parses full config", () => {
@@ -37,12 +41,12 @@ describe("Integration", () => {
           },
         },
       });
-      expect(config).not.toBeNull();
-      expect(config!.dbPath).toBe("/custom/db.sqlite");
-      expect(config!.mediaPath).toBe("/custom/media");
-      expect(config!.retentionDays).toBe(30);
-      expect(config!.filters.blocklist).toEqual(["+4917600000001"]);
-      expect(config!.filters.allowlist).toEqual(["+4917600000002", "group@g.us"]);
+      expect(config).toBeDefined();
+      expect(config.dbPath).toBe("/custom/db.sqlite");
+      expect(config.mediaPath).toBe("/custom/media");
+      expect(config.retentionDays).toBe(30);
+      expect(config.filters.blocklist).toEqual(["+4917600000001"]);
+      expect(config.filters.allowlist).toEqual(["+4917600000002", "group@g.us"]);
     });
   });
 
