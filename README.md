@@ -4,15 +4,21 @@ A forked WhatsApp channel plugin for OpenClaw that adds passive observer-account
 
 ## Overview
 
-This plugin is a full superset of the built-in OpenClaw WhatsApp plugin. Normal and business accounts work identically to upstream -- same runtime methods, same session handling, same agent pipeline. The fork adds a new **observer mode** that lets you designate accounts as passive listeners. Observer accounts connect to WhatsApp via Baileys, log every incoming message to a local SQLite database, optionally capture media files, and expose query tools for agents -- all without creating sessions, triggering the agent pipeline, or ever sending a message.
+This plugin is a full superset of the built-in OpenClaw WhatsApp plugin. Normal and business accounts work identically to upstream -- same runtime methods, same session handling, same agent pipeline. The fork adds two capabilities:
+
+1. **Observer mode** -- designate accounts as passive listeners. Observer accounts connect to WhatsApp via Baileys, log every incoming message (including reactions, polls, edits, and deletions) to a local SQLite database, optionally capture media files, and expose query tools for agents -- all without creating sessions, triggering the agent pipeline, or ever sending a message.
+
+2. **Pipeline logging** -- all messages received on normal (non-observer) accounts are also logged to the same SQLite database via the `message_received` hook. This means agent tools can search across all accounts in one place.
 
 ## How It Differs from the Original WhatsApp Plugin
 
 | Capability | Upstream plugin | This fork |
 |---|---|---|
 | Normal / business accounts | Full support | Identical behaviour (same code paths) |
+| Normal-account message logging | Not available | All inbound messages logged to SQLite via hook |
 | Observer account mode | Not available | Connect, log, query -- zero send capability |
-| SQLite message store | Not available | Automatic, per-observer |
+| Reactions, polls, edits, deletions | Not logged | Logged with message type and reference to original |
+| SQLite message store | Not available | Shared DB across all accounts |
 | Media capture to disk | Not available | Optional, configurable path |
 | Agent query tools | Not available | 4 read-only tools for searching and summarising |
 
@@ -33,7 +39,9 @@ Observer accounts are prevented from sending messages at three independent layer
 **Normal account:**
 
 ```
-WhatsApp --> Baileys --> channel.onMessage --> OpenClaw session --> Agent --> channel.sendMessage --> WhatsApp
+WhatsApp --> Baileys --> channel.onMessage --> OpenClaw session --> Agent --> reply
+                                                  |
+                                          message_received hook --> SQLite write
 ```
 
 **Observer account:**
@@ -42,7 +50,7 @@ WhatsApp --> Baileys --> channel.onMessage --> OpenClaw session --> Agent --> ch
 WhatsApp --> Baileys --> observer.onMessage --> SQLite write (+ optional media save) --> done
 ```
 
-No session is created. No agent is invoked. No reply is sent.
+Normal accounts log to the DB via a hook (no impact on session/agent flow). Observer accounts bypass the pipeline entirely -- no session is created, no agent is invoked, no reply is sent.
 
 ## Getting Started
 
@@ -116,10 +124,28 @@ The observer account will connect, begin receiving messages, and write them to t
 ### Step 6 -- Verify
 
 ```bash
-sqlite3 ./data/observer.sqlite "SELECT COUNT(*) FROM messages;"
+sqlite3 ~/.openclaw/whatsapp-observer/messages.db \
+  "SELECT source, message_type, sender_name, content, datetime(timestamp/1000, 'unixepoch') FROM messages ORDER BY timestamp DESC LIMIT 10;"
 ```
 
-You should see the count increase as messages arrive.
+You should see rows from both `observer` and `pipeline` sources as messages arrive.
+
+## Message Types
+
+Every logged message has a `message_type` and `source` field:
+
+| `message_type` | Description | `ref_message_id` |
+|---|---|---|
+| `message` | Regular text or media message | -- |
+| `reaction` | Emoji reaction | ID of the message being reacted to |
+| `poll` | Poll creation (question + options) | -- |
+| `edit` | Edited message (new content) | ID of the original message |
+| `delete` | Message deletion / revoke | ID of the deleted message |
+
+| `source` | Description |
+|---|---|
+| `observer` | Captured by the observer Baileys listener |
+| `pipeline` | Captured from a normal account via `message_received` hook |
 
 ## Observer Config Reference
 
