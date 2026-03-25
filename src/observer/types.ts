@@ -3,6 +3,7 @@ export type ObserverConfig = {
   mediaPath: string;
   filters: ObserverFilters;
   retentionDays: number;
+  observerAccounts: string[];
 };
 
 export type ObserverFilters = {

@@ -22,16 +22,14 @@ export function parseObserverConfig(
     ? (rawFilters.allowlist as string[])
     : ["*"];
 
-  return { dbPath, mediaPath, filters: { blocklist, allowlist }, retentionDays };
+  // Observer account IDs stored in plugin config, not in channels.whatsapp
+  const observerAccounts = Array.isArray(raw.accounts)
+    ? (raw.accounts as string[])
+    : [];
+
+  return { dbPath, mediaPath, filters: { blocklist, allowlist }, retentionDays, observerAccounts };
 }
 
-export function isObserverAccount(
-  accountId: string,
-  config: ObserverConfig,
-  accounts?: Map<string, { observerMode?: boolean }>,
-): boolean {
-  // This is resolved at runtime via the account config's observerMode field.
-  // The caller passes in the account map for lookup.
-  if (!accounts) return false;
-  return accounts.get(accountId)?.observerMode === true;
+export function isObserverAccount(accountId: string, config: ObserverConfig): boolean {
+  return config.observerAccounts.includes(accountId);
 }

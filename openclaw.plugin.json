@@ -4,6 +4,44 @@
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {}
+    "properties": {
+      "observer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Account IDs to run in observer mode"
+          },
+          "dbPath": {
+            "type": "string",
+            "description": "Path to SQLite database for observer messages"
+          },
+          "mediaPath": {
+            "type": "string",
+            "description": "Path to store downloaded media files"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "blocklist": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "allowlist": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          },
+          "retentionDays": {
+            "type": "number",
+            "description": "Days to retain messages (0 = forever)"
+          }
+        }
+      }
+    }
   }
 }

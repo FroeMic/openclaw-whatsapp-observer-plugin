@@ -33,17 +33,33 @@ echo ""
 # Stop gateway if running
 openclaw gateway stop 2>/dev/null || true
 
-# Bootstrap config
+# Enable the WhatsApp account
 openclaw config set channels.whatsapp.accounts."$ACCOUNT_ID".enabled true
 
-if [ "$MODE" = "observer" ]; then
-  openclaw config set channels.whatsapp.accounts."$ACCOUNT_ID".observerMode true
-else
+if [ "$MODE" = "normal" ]; then
   openclaw config set channels.whatsapp.accounts."$ACCOUNT_ID".dmPolicy pairing
 fi
 
 # Ensure plugin is enabled
 openclaw config set plugins.entries.whatsapp-pro.enabled true
+
+if [ "$MODE" = "observer" ]; then
+  # Add account to observer accounts list in plugin config
+  # Read current list, append if not already present
+  CURRENT=$(openclaw config get plugins.entries.whatsapp-pro.config.observer.accounts 2>/dev/null || echo "[]")
+  if echo "$CURRENT" | grep -q "\"$ACCOUNT_ID\""; then
+    echo "Account '$ACCOUNT_ID' already in observer accounts list."
+  else
+    # Build new array by appending
+    if [ "$CURRENT" = "[]" ] || [ "$CURRENT" = "undefined" ] || [ -z "$CURRENT" ]; then
+      NEW_LIST="[\"$ACCOUNT_ID\"]"
+    else
+      # Remove trailing ] and append
+      NEW_LIST="${CURRENT%]}",\"$ACCOUNT_ID\"]"
+    fi
+    openclaw config set plugins.entries.whatsapp-pro.config.observer.accounts "$NEW_LIST"
+  fi
+fi
 
 echo ""
 echo "Config updated. Starting WhatsApp login..."

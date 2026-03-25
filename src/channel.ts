@@ -6,6 +6,7 @@ import {
 } from "openclaw/plugin-sdk/status-helpers";
 // Observer mode imports
 import { startObserverMonitor } from "./observer/monitor.js";
+import { isObserverAccount } from "./observer-config.js";
 import type { ObserverDB } from "./observer/db.js";
 import type { ObserverConfig } from "./observer/types.js";
 
@@ -303,7 +304,7 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
           const account = ctx.account;
 
           // Observer mode bypasses the entire auto-reply pipeline
-          if ((account as Record<string, unknown>).observerMode) {
+          if (observerConfig && isObserverAccount(account.accountId, observerConfig)) {
             ctx.log?.info(`[${account.accountId}] starting in OBSERVER mode`);
             if (!observerDb || !observerConfig) {
               ctx.log?.error(

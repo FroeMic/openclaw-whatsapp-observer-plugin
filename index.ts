@@ -1,7 +1,7 @@
 import { defineChannelPluginEntry } from "openclaw/plugin-sdk/core";
 import { whatsappPlugin, setObserverState } from "./src/channel.js";
 import { setWhatsAppRuntime } from "./src/runtime.js";
-import { parseObserverConfig } from "./src/observer-config.js";
+import { parseObserverConfig, isObserverAccount } from "./src/observer-config.js";
 import { ObserverDB } from "./src/observer/db.js";
 import { registerObserverTools } from "./src/observer/tools.js";
 
@@ -54,6 +54,7 @@ export default defineChannelPluginEntry({
     });
 
     // Safety layer: block outbound on observer accounts
+    const observerCfg = resolvedConfig;
     api.on(
       "message_sending",
       (event, ctx) => {
@@ -63,14 +64,7 @@ export default defineChannelPluginEntry({
         const accountId = hookCtx.accountId as string | undefined;
         if (!accountId) return;
 
-        const cfg = hookCtx.config as Record<string, unknown> | undefined;
-        const waConfig = cfg?.channels as Record<string, unknown> | undefined;
-        const waAccounts = (waConfig?.whatsapp as Record<string, unknown>)?.accounts as
-          | Record<string, Record<string, unknown>>
-          | undefined;
-        const accountConfig = waAccounts?.[accountId];
-
-        if (accountConfig?.observerMode) {
+        if (isObserverAccount(accountId, observerCfg)) {
           api.logger.warn(
             `[whatsapp-pro] SAFETY: Blocked outbound message on observer account ${accountId}`,
           );

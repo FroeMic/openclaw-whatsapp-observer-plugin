@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { parseObserverConfig } from "../src/observer-config.js";
+import { parseObserverConfig, isObserverAccount } from "../src/observer-config.js";
 import { ObserverDB } from "../src/observer/db.js";
 import { registerObserverTools } from "../src/observer/tools.js";
 
@@ -73,71 +73,21 @@ describe("Integration", () => {
     });
   });
 
-  describe("Safety: message_sending hook", () => {
-    it("blocks outbound on observer accounts", () => {
-      // Simulate the hook logic from index.ts
-      const blocked: string[] = [];
+  describe("Safety: isObserverAccount", () => {
+    it("identifies observer accounts from plugin config", () => {
+      const config = parseObserverConfig({
+        observer: { accounts: ["observer-1", "personal"] },
+      });
 
-      function messageSendingHook(
-        _event: unknown,
-        ctx: Record<string, unknown>,
-      ): { cancel: true } | undefined {
-        if (ctx.channelId !== "whatsapp") return;
-        const accountId = ctx.accountId as string | undefined;
-        if (!accountId) return;
+      expect(isObserverAccount("observer-1", config)).toBe(true);
+      expect(isObserverAccount("personal", config)).toBe(true);
+      expect(isObserverAccount("main", config)).toBe(false);
+      expect(isObserverAccount("unknown", config)).toBe(false);
+    });
 
-        const waAccounts = (
-          (ctx.config as Record<string, unknown>)?.channels as Record<string, unknown>
-        )?.whatsapp as Record<string, unknown>;
-        const accounts = waAccounts?.accounts as Record<string, Record<string, unknown>>;
-        const accountConfig = accounts?.[accountId];
-
-        if (accountConfig?.observerMode) {
-          blocked.push(accountId);
-          return { cancel: true };
-        }
-      }
-
-      // Test observer account
-      const result1 = messageSendingHook(
-        { to: "+4917600000001", content: "Hello" },
-        {
-          channelId: "whatsapp",
-          accountId: "observer-1",
-          config: {
-            channels: {
-              whatsapp: {
-                accounts: {
-                  "observer-1": { observerMode: true },
-                  main: { observerMode: false },
-                },
-              },
-            },
-          },
-        },
-      );
-      expect(result1).toEqual({ cancel: true });
-      expect(blocked).toEqual(["observer-1"]);
-
-      // Test normal account
-      const result2 = messageSendingHook(
-        { to: "+4917600000001", content: "Hello" },
-        {
-          channelId: "whatsapp",
-          accountId: "main",
-          config: {
-            channels: {
-              whatsapp: {
-                accounts: {
-                  "observer-1": { observerMode: true },
-                  main: { observerMode: false },
-                },
-              },
-            },
-          },
-        },
-      );
-      expect(result2).toBeUndefined();
+    it("returns false when no observer accounts configured", () => {
+      const config = parseObserverConfig({});
+      expect(isObserverAccount("personal", config)).toBe(false);
     });
   });
 
