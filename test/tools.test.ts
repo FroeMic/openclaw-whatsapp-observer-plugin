@@ -12,8 +12,8 @@ describe("Observer Tools", () => {
     },
   };
 
-  beforeEach(() => {
-    db = new ObserverDB(":memory:");
+  beforeEach(async () => {
+    db = await ObserverDB.create(":memory:");
     registeredTools.clear();
     registerObserverTools(mockApi, db);
 

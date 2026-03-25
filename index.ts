@@ -18,13 +18,13 @@ export default defineChannelPluginEntry({
   plugin: whatsappPlugin,
   setRuntime: setWhatsAppRuntime,
 
-  registerFull(api) {
+  async registerFull(api) {
     const config = parseObserverConfig(api.pluginConfig);
     const dbPath = api.resolvePath(config.dbPath);
     const mediaPath = api.resolvePath(config.mediaPath);
     const resolvedConfig = { ...config, dbPath, mediaPath };
 
-    observerDb = new ObserverDB(dbPath);
+    observerDb = await ObserverDB.create(dbPath);
     setObserverState(observerDb, resolvedConfig);
     registerObserverTools(api, observerDb);
 

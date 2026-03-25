@@ -51,8 +51,8 @@ describe("Integration", () => {
   });
 
   describe("Plugin registration flow", () => {
-    it("registers tools when observer config is present", () => {
-      const db = new ObserverDB(":memory:");
+    it("registers tools when observer config is present", async () => {
+      const db = await ObserverDB.create(":memory:");
       const tools: string[] = [];
       const mockApi = {
         registerTool(tool: Record<string, unknown>, opts?: { name: string }) {
@@ -142,8 +142,8 @@ describe("Integration", () => {
   });
 
   describe("Pipeline message logging (message_received hook)", () => {
-    it("logs a normal-path message to the DB", () => {
-      const db = new ObserverDB(":memory:");
+    it("logs a normal-path message to the DB", async () => {
+      const db = await ObserverDB.create(":memory:");
 
       // Simulate the hook logic from index.ts
       function messageReceivedHook(
@@ -197,8 +197,8 @@ describe("Integration", () => {
       db.close();
     });
 
-    it("ignores non-whatsapp channels", () => {
-      const db = new ObserverDB(":memory:");
+    it("ignores non-whatsapp channels", async () => {
+      const db = await ObserverDB.create(":memory:");
       let called = false;
 
       function messageReceivedHook(

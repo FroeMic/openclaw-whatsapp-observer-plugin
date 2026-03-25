@@ -1,4 +1,6 @@
-import Database from "better-sqlite3";
+import initSqlJs, { type Database } from "sql.js";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import type {
   ConversationSummary,
   ObserverMessage,
@@ -22,8 +24,11 @@ CREATE TABLE IF NOT EXISTS messages (
   media_type TEXT,
   media_path TEXT,
   media_mime TEXT,
+  message_type TEXT NOT NULL DEFAULT 'message',
+  ref_message_id TEXT,
+  source TEXT NOT NULL DEFAULT 'observer',
   timestamp INTEGER NOT NULL,
-  logged_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+  logged_at INTEGER NOT NULL DEFAULT 0,
   UNIQUE(message_id, account_id)
 );
 
@@ -31,90 +36,120 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id);
+CREATE INDEX IF NOT EXISTS idx_messages_content ON messages(content);
 `;
 
-const FTS_SQL = `
-CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-  content, sender_name, group_name,
-  content='messages', content_rowid='id'
-);
-`;
-
-const FTS_TRIGGERS_SQL = `
-CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
-  INSERT INTO messages_fts(rowid, content, sender_name, group_name)
-  VALUES (new.id, new.content, new.sender_name, new.group_name);
-END;
-
-CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
-  INSERT INTO messages_fts(messages_fts, rowid, content, sender_name, group_name)
-  VALUES ('delete', old.id, old.content, old.sender_name, old.group_name);
-END;
-`;
-
-const MIGRATION_SQL = `
-ALTER TABLE messages ADD COLUMN message_type TEXT NOT NULL DEFAULT 'message';
-ALTER TABLE messages ADD COLUMN ref_message_id TEXT;
-ALTER TABLE messages ADD COLUMN source TEXT NOT NULL DEFAULT 'observer';
-`;
+const MIGRATION_COLUMNS = [
+  "ALTER TABLE messages ADD COLUMN message_type TEXT NOT NULL DEFAULT 'message';",
+  "ALTER TABLE messages ADD COLUMN ref_message_id TEXT;",
+  "ALTER TABLE messages ADD COLUMN source TEXT NOT NULL DEFAULT 'observer';",
+];
 
 const INSERT_SQL = `
 INSERT OR IGNORE INTO messages (
   message_id, account_id, sender, sender_name, sender_e164,
   conversation_id, is_group, group_id, group_name,
   content, media_type, media_path, media_mime, timestamp,
-  message_type, ref_message_id, source
+  message_type, ref_message_id, source, logged_at
 ) VALUES (
-  @messageId, @accountId, @sender, @senderName, @senderE164,
-  @conversationId, @isGroup, @groupId, @groupName,
-  @content, @mediaType, @mediaPath, @mediaMime, @timestamp,
-  @messageType, @refMessageId, @source
+  :messageId, :accountId, :sender, :senderName, :senderE164,
+  :conversationId, :isGroup, :groupId, :groupName,
+  :content, :mediaType, :mediaPath, :mediaMime, :timestamp,
+  :messageType, :refMessageId, :source, :loggedAt
 )`;
 
 export class ObserverDB {
-  private db: Database.Database;
+  private db: Database;
+  private dbPath: string | null;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(dbPath: string | ":memory:") {
-    this.db = new Database(dbPath);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
+  constructor(db: Database, dbPath: string | null) {
+    this.db = db;
+    this.dbPath = dbPath;
     this.init();
   }
 
+  static async create(dbPath: string | ":memory:"): Promise<ObserverDB> {
+    const SQL = await initSqlJs();
+    let db: Database;
+    if (dbPath === ":memory:") {
+      db = new SQL.Database();
+      return new ObserverDB(db, null);
+    }
+    try {
+      const buffer = readFileSync(dbPath);
+      db = new SQL.Database(buffer);
+    } catch {
+      mkdirSync(dirname(dbPath), { recursive: true });
+      db = new SQL.Database();
+    }
+    return new ObserverDB(db, dbPath);
+  }
+
   private init(): void {
+    this.db.run("PRAGMA journal_mode = WAL;");
+    this.db.run("PRAGMA foreign_keys = ON;");
     this.db.exec(SCHEMA_SQL);
-    // Migrate: add new columns for existing DBs (no-op on fresh DBs)
-    for (const stmt of MIGRATION_SQL.trim().split(";").filter(Boolean)) {
+    for (const stmt of MIGRATION_COLUMNS) {
       try {
-        this.db.exec(stmt.trim() + ";");
+        this.db.run(stmt);
       } catch {
-        // Column already exists — expected for fresh DBs where CREATE TABLE includes them
+        // Column already exists
       }
     }
-    this.db.exec(FTS_SQL);
-    this.db.exec(FTS_TRIGGERS_SQL);
+  }
+
+  private scheduleSave(): void {
+    if (!this.dbPath || this.saveTimer) return;
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      this.flush();
+    }, 1000);
+  }
+
+  flush(): void {
+    if (!this.dbPath) return;
+    try {
+      const data = this.db.export();
+      writeFileSync(this.dbPath, Buffer.from(data));
+    } catch {
+      // best-effort
+    }
   }
 
   insertMessage(msg: ObserverMessage): void {
-    this.db.prepare(INSERT_SQL).run({
-      messageId: msg.messageId ?? null,
-      accountId: msg.accountId,
-      sender: msg.sender,
-      senderName: msg.senderName ?? null,
-      senderE164: msg.senderE164 ?? null,
-      conversationId: msg.conversationId,
-      isGroup: msg.isGroup ? 1 : 0,
-      groupId: msg.isGroup ? msg.conversationId : null,
-      groupName: msg.groupName ?? null,
-      content: msg.content ?? null,
-      mediaType: msg.mediaType ?? null,
-      mediaPath: msg.mediaPath ?? null,
-      mediaMime: msg.mediaMime ?? null,
-      timestamp: msg.timestamp,
-      messageType: msg.messageType ?? "message",
-      refMessageId: msg.refMessageId ?? null,
-      source: msg.source ?? "observer",
+    this.db.run(INSERT_SQL, {
+      ":messageId": msg.messageId ?? null,
+      ":accountId": msg.accountId,
+      ":sender": msg.sender,
+      ":senderName": msg.senderName ?? null,
+      ":senderE164": msg.senderE164 ?? null,
+      ":conversationId": msg.conversationId,
+      ":isGroup": msg.isGroup ? 1 : 0,
+      ":groupId": msg.isGroup ? msg.conversationId : null,
+      ":groupName": msg.groupName ?? null,
+      ":content": msg.content ?? null,
+      ":mediaType": msg.mediaType ?? null,
+      ":mediaPath": msg.mediaPath ?? null,
+      ":mediaMime": msg.mediaMime ?? null,
+      ":timestamp": msg.timestamp,
+      ":messageType": msg.messageType ?? "message",
+      ":refMessageId": msg.refMessageId ?? null,
+      ":source": msg.source ?? "observer",
+      ":loggedAt": Date.now(),
     });
+    this.scheduleSave();
+  }
+
+  private query(sql: string, binds: Record<string, unknown> = {}): Array<Record<string, unknown>> {
+    const stmt = this.db.prepare(sql);
+    stmt.bind(binds);
+    const results: Array<Record<string, unknown>> = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject() as Record<string, unknown>);
+    }
+    stmt.free();
+    return results;
   }
 
   search(params: {
@@ -128,31 +163,34 @@ export class ObserverDB {
     const conditions: string[] = [];
     const binds: Record<string, unknown> = {};
 
-    // FTS query — wrap each term in double quotes to escape special FTS5 chars
-    conditions.push("m.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH @query)");
-    binds.query = params.query
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((term) => `"${term.replace(/"/g, '""')}"`)
-      .join(" ");
+    // LIKE-based search (sql.js WASM doesn't include FTS5)
+    const terms = params.query.split(/\s+/).filter(Boolean);
+    for (let i = 0; i < terms.length; i++) {
+      conditions.push(`(m.content LIKE :term${i} OR m.sender_name LIKE :term${i} OR m.group_name LIKE :term${i})`);
+      binds[`:term${i}`] = `%${terms[i]}%`;
+    }
 
     if (params.sender) {
-      conditions.push("(m.sender = @sender OR m.sender_e164 = @sender OR m.sender_name LIKE @senderLike)");
-      binds.sender = params.sender;
-      binds.senderLike = `%${params.sender}%`;
+      conditions.push("(m.sender = :sender OR m.sender_e164 = :sender OR m.sender_name LIKE :senderLike)");
+      binds[":sender"] = params.sender;
+      binds[":senderLike"] = `%${params.sender}%`;
     }
     if (params.group) {
-      conditions.push("(m.group_id = @group OR m.group_name LIKE @groupLike)");
-      binds.group = params.group;
-      binds.groupLike = `%${params.group}%`;
+      conditions.push("(m.group_id = :group OR m.group_name LIKE :groupLike)");
+      binds[":group"] = params.group;
+      binds[":groupLike"] = `%${params.group}%`;
     }
     if (params.afterDate) {
-      conditions.push("m.timestamp >= @afterDate");
-      binds.afterDate = params.afterDate;
+      conditions.push("m.timestamp >= :afterDate");
+      binds[":afterDate"] = params.afterDate;
     }
     if (params.beforeDate) {
-      conditions.push("m.timestamp <= @beforeDate");
-      binds.beforeDate = params.beforeDate;
+      conditions.push("m.timestamp <= :beforeDate");
+      binds[":beforeDate"] = params.beforeDate;
+    }
+
+    if (conditions.length === 0) {
+      conditions.push("1=1");
     }
 
     const limit = Math.min(params.limit ?? 50, 200);
@@ -164,11 +202,11 @@ export class ObserverDB {
       FROM messages m
       WHERE ${conditions.join(" AND ")}
       ORDER BY m.timestamp DESC
-      LIMIT @limit
+      LIMIT :limit
     `;
-    binds.limit = limit;
+    binds[":limit"] = limit;
 
-    return this.db.prepare(sql).all(binds) as Array<Record<string, unknown>>;
+    return this.query(sql, binds);
   }
 
   getRecent(params: {
@@ -180,12 +218,12 @@ export class ObserverDB {
     const binds: Record<string, unknown> = {};
 
     if (params.conversationId) {
-      conditions.push("conversation_id = @conversationId");
-      binds.conversationId = params.conversationId;
+      conditions.push("conversation_id = :conversationId");
+      binds[":conversationId"] = params.conversationId;
     }
     if (params.accountId) {
-      conditions.push("account_id = @accountId");
-      binds.accountId = params.accountId;
+      conditions.push("account_id = :accountId");
+      binds[":accountId"] = params.accountId;
     }
 
     const limit = Math.min(params.limit ?? 50, 200);
@@ -198,11 +236,11 @@ export class ObserverDB {
       FROM messages
       ${where}
       ORDER BY timestamp DESC
-      LIMIT @limit
+      LIMIT :limit
     `;
-    binds.limit = limit;
+    binds[":limit"] = limit;
 
-    return this.db.prepare(sql).all(binds) as Array<Record<string, unknown>>;
+    return this.query(sql, binds);
   }
 
   listConversations(params: {
@@ -213,8 +251,8 @@ export class ObserverDB {
     const binds: Record<string, unknown> = {};
 
     if (params.accountId) {
-      conditions.push("account_id = @accountId");
-      binds.accountId = params.accountId;
+      conditions.push("account_id = :accountId");
+      binds[":accountId"] = params.accountId;
     }
 
     const limit = Math.min(params.limit ?? 50, 200);
@@ -232,11 +270,11 @@ export class ObserverDB {
       ${where}
       GROUP BY conversation_id
       ORDER BY MAX(timestamp) DESC
-      LIMIT @limit
+      LIMIT :limit
     `;
-    binds.limit = limit;
+    binds[":limit"] = limit;
 
-    return this.db.prepare(sql).all(binds) as ConversationSummary[];
+    return this.query(sql, binds) as unknown as ConversationSummary[];
   }
 
   getStats(params: {
@@ -248,12 +286,12 @@ export class ObserverDB {
     const binds: Record<string, unknown> = {};
 
     if (params.accountId) {
-      conditions.push("account_id = @accountId");
-      binds.accountId = params.accountId;
+      conditions.push("account_id = :accountId");
+      binds[":accountId"] = params.accountId;
     }
     if (params.afterDate) {
-      conditions.push("timestamp >= @afterDate");
-      binds.afterDate = params.afterDate;
+      conditions.push("timestamp >= :afterDate");
+      binds[":afterDate"] = params.afterDate;
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -269,7 +307,14 @@ export class ObserverDB {
       ${where}
     `;
 
-    const stats = this.db.prepare(statsSql).get(binds) as ObserverStats;
+    const statsRows = this.query(statsSql, binds);
+    const stats = (statsRows[0] ?? {
+      totalMessages: 0,
+      uniqueSenders: 0,
+      uniqueConversations: 0,
+      firstMessageAt: null,
+      lastMessageAt: null,
+    }) as ObserverStats;
 
     let grouped: StatsGroupByResult[] | undefined;
     if (params.groupBy) {
@@ -297,7 +342,7 @@ export class ObserverDB {
         ORDER BY count DESC
         LIMIT 50
       `;
-      grouped = this.db.prepare(groupSql).all(binds) as StatsGroupByResult[];
+      grouped = this.query(groupSql, binds) as unknown as StatsGroupByResult[];
     }
 
     return { ...stats, grouped };
@@ -306,11 +351,18 @@ export class ObserverDB {
   prune(retentionDays: number): number {
     if (retentionDays <= 0) return 0;
     const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
-    const result = this.db.prepare("DELETE FROM messages WHERE timestamp < ?").run(cutoffMs);
-    return result.changes;
+    this.db.run("DELETE FROM messages WHERE timestamp < :cutoff", { ":cutoff": cutoffMs });
+    const result = this.query("SELECT changes() AS count");
+    this.scheduleSave();
+    return (result[0]?.count as number) ?? 0;
   }
 
   close(): void {
+    this.flush();
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
     this.db.close();
   }
 }

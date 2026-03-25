@@ -4,8 +4,8 @@ import { ObserverDB } from "../src/observer/db.js";
 describe("ObserverDB", () => {
   let db: ObserverDB;
 
-  beforeEach(() => {
-    db = new ObserverDB(":memory:");
+  beforeEach(async () => {
+    db = await ObserverDB.create(":memory:");
   });
 
   afterEach(() => {
