@@ -1,4 +1,4 @@
-import { defineChannelPluginEntry } from "openclaw/plugin-sdk/core";
+import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { whatsappPlugin, setObserverState } from "./src/channel.js";
 import { setWhatsAppRuntime } from "./src/runtime.js";
 import { parseObserverConfig, isObserverAccount } from "./src/observer-config.js";
@@ -8,44 +8,31 @@ import { registerObserverTools } from "./src/observer/tools.js";
 export { whatsappPlugin } from "./src/channel.js";
 export { setWhatsAppRuntime } from "./src/runtime.js";
 
-// Deferred DB holder — tools and hooks reference this; the actual DB
-// is created async after WASM loads but tool registration is synchronous.
 let observerDb: ObserverDB | null = null;
-let dbReady: Promise<ObserverDB> | null = null;
 
-function getObserverDb(): ObserverDB | null {
-  return observerDb;
-}
-
-async function ensureObserverDb(): Promise<ObserverDB> {
-  if (observerDb) return observerDb;
-  if (dbReady) return dbReady;
-  throw new Error("Observer DB not initialized");
-}
-
-export default defineChannelPluginEntry({
+export default definePluginEntry({
   id: "whatsapp-pro",
   name: "WhatsApp Pro",
   description: "WhatsApp channel plugin with observer mode for passive message logging",
-  plugin: whatsappPlugin,
-  setRuntime: setWhatsAppRuntime,
 
-  registerFull(api) {
+  register(api) {
+    // Set up runtime and register channel (same as defineChannelPluginEntry)
+    setWhatsAppRuntime(api.runtime);
+    api.registerChannel({ plugin: whatsappPlugin });
+
+    // Observer setup — DB init + tool registration + hooks
     const config = parseObserverConfig(api.pluginConfig);
     const dbPath = api.resolvePath(config.dbPath);
     const mediaPath = api.resolvePath(config.mediaPath);
     const resolvedConfig = { ...config, dbPath, mediaPath };
 
-    // Start async DB creation — tools will await this on first call
-    dbReady = ObserverDB.create(dbPath).then((db) => {
+    // Start async DB creation — tools use a lazy getter
+    ObserverDB.create(dbPath).then((db) => {
       observerDb = db;
       setObserverState(db, resolvedConfig);
-      return db;
     });
 
-    // Register tools synchronously with a lazy DB getter.
-    // Tool execute() callbacks are async and only run when the agent calls them,
-    // by which time the DB will be initialized.
+    // Register tools synchronously with lazy DB getter
     registerObserverTools(api, () => {
       if (!observerDb) throw new Error("Observer DB not yet initialized");
       return observerDb;
