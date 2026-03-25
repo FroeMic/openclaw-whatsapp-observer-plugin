@@ -14,6 +14,12 @@ echo ""
 echo "Disabling built-in whatsapp plugin..."
 openclaw plugins disable whatsapp 2>/dev/null || true
 
+# Remove previous install if exists
+if [ -d "$EXTENSION_DIR" ]; then
+  echo "Removing previous install..."
+  rm -rf "$EXTENSION_DIR"
+fi
+
 # Install plugin
 echo "Installing whatsapp-pro plugin..."
 openclaw plugins install "$PLUGIN_DIR"
