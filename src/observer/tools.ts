@@ -2,20 +2,15 @@ import { Type } from "@sinclair/typebox";
 import type { ObserverDB } from "./db.js";
 
 type PluginApi = {
-  registerTool: (tool: Record<string, unknown>, opts?: { name: string }) => void;
+  registerTool: (tool: unknown, opts?: Record<string, unknown>) => void;
 };
 
 export function registerObserverTools(api: PluginApi, dbOrGetter: ObserverDB | (() => ObserverDB)): void {
-  const db = typeof dbOrGetter === "function"
-    ? new Proxy({} as ObserverDB, {
-        get(_target, prop) {
-          return (dbOrGetter() as Record<string, unknown>)[prop as string];
-        },
-      })
-    : dbOrGetter;
+  const getDb = typeof dbOrGetter === "function" ? dbOrGetter : () => dbOrGetter;
+
   // Tool 1: Full-text search
   api.registerTool(
-    {
+    (_ctx: unknown) => ({
       name: "wa_observer_search",
       label: "WhatsApp Observer Search",
       description:
@@ -54,7 +49,7 @@ export function registerObserverTools(api: PluginApi, dbOrGetter: ObserverDB | (
           limit?: number;
         },
       ) {
-        const results = db.search({
+        const results = getDb().search({
           query: params.query,
           sender: params.sender,
           group: params.group,
@@ -87,18 +82,18 @@ export function registerObserverTools(api: PluginApi, dbOrGetter: ObserverDB | (
           details: { count: results.length, messages: results },
         };
       },
-    },
+    }),
     { name: "wa_observer_search" },
   );
 
   // Tool 2: Recent messages
   api.registerTool(
-    {
+    (_ctx: unknown) => ({
       name: "wa_observer_recent",
       label: "WhatsApp Observer Recent",
       description:
         "Get the most recent passively logged WhatsApp messages. " +
-        "Optionally filter by conversation or account.",
+        "Optionally filter by conversation, sender, or account.",
       parameters: Type.Object({
         conversationId: Type.Optional(
           Type.String({ description: "Filter by conversation JID" }),
@@ -122,7 +117,7 @@ export function registerObserverTools(api: PluginApi, dbOrGetter: ObserverDB | (
           limit?: number;
         },
       ) {
-        const results = db.getRecent({
+        const results = getDb().getRecent({
           conversationId: params.conversationId,
           sender: params.sender,
           accountId: params.accountId,
@@ -153,13 +148,13 @@ export function registerObserverTools(api: PluginApi, dbOrGetter: ObserverDB | (
           details: { count: results.length, messages: results },
         };
       },
-    },
+    }),
     { name: "wa_observer_recent" },
   );
 
   // Tool 3: List conversations
   api.registerTool(
-    {
+    (_ctx: unknown) => ({
       name: "wa_observer_conversations",
       label: "WhatsApp Observer Conversations",
       description:
@@ -177,7 +172,7 @@ export function registerObserverTools(api: PluginApi, dbOrGetter: ObserverDB | (
         _toolCallId: string,
         params: { accountId?: string; limit?: number },
       ) {
-        const conversations = db.listConversations({
+        const conversations = getDb().listConversations({
           accountId: params.accountId,
           limit: params.limit,
         });
@@ -205,13 +200,13 @@ export function registerObserverTools(api: PluginApi, dbOrGetter: ObserverDB | (
           details: { count: conversations.length, conversations },
         };
       },
-    },
+    }),
     { name: "wa_observer_conversations" },
   );
 
   // Tool 4: Statistics
   api.registerTool(
-    {
+    (_ctx: unknown) => ({
       name: "wa_observer_stats",
       label: "WhatsApp Observer Stats",
       description:
@@ -242,7 +237,7 @@ export function registerObserverTools(api: PluginApi, dbOrGetter: ObserverDB | (
           groupBy?: "sender" | "group" | "day" | "hour";
         },
       ) {
-        const stats = db.getStats({
+        const stats = getDb().getStats({
           accountId: params.accountId,
           afterDate: params.afterDate ? new Date(params.afterDate).getTime() : undefined,
           groupBy: params.groupBy,
@@ -272,7 +267,7 @@ export function registerObserverTools(api: PluginApi, dbOrGetter: ObserverDB | (
           details: stats,
         };
       },
-    },
+    }),
     { name: "wa_observer_stats" },
   );
 }

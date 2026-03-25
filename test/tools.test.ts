@@ -7,8 +7,13 @@ describe("Observer Tools", () => {
   const registeredTools: Map<string, Record<string, unknown>> = new Map();
 
   const mockApi = {
-    registerTool(tool: Record<string, unknown>, opts?: { name: string }) {
-      registeredTools.set(opts?.name ?? (tool.name as string), tool);
+    registerTool(toolOrFactory: unknown, opts?: Record<string, unknown>) {
+      // Tools are now factory functions (ctx) => toolObject
+      const tool = typeof toolOrFactory === "function"
+        ? (toolOrFactory as Function)({})
+        : toolOrFactory as Record<string, unknown>;
+      const name = (opts?.name as string) ?? (tool as Record<string, unknown>).name as string;
+      registeredTools.set(name, tool as Record<string, unknown>);
     },
   };
 
