@@ -136,4 +136,82 @@ describe("Integration", () => {
       expect(result2).toBeUndefined();
     });
   });
+
+  describe("Pipeline message logging (message_received hook)", () => {
+    it("logs a normal-path message to the DB", () => {
+      const db = new ObserverDB(":memory:");
+
+      // Simulate the hook logic from index.ts
+      function messageReceivedHook(
+        event: Record<string, unknown>,
+        ctx: Record<string, unknown>,
+      ): void {
+        if (ctx.channelId !== "whatsapp") return;
+        const metadata = (event.metadata ?? {}) as Record<string, unknown>;
+        db.insertMessage({
+          messageId: (metadata.messageId as string) ?? undefined,
+          accountId: (ctx.accountId as string) ?? "unknown",
+          sender: event.from as string,
+          senderName: (metadata.senderName as string) ?? undefined,
+          senderE164: (metadata.senderE164 as string) ?? undefined,
+          conversationId: (ctx.conversationId as string) ?? (event.from as string),
+          isGroup: Boolean(metadata.isGroup),
+          groupName: (metadata.groupSubject as string) ?? undefined,
+          content: event.content as string,
+          timestamp: (event.timestamp as number) ?? Date.now(),
+          messageType: "message",
+          source: "pipeline",
+        });
+      }
+
+      messageReceivedHook(
+        {
+          from: "+4917600000001",
+          content: "Hello from main account",
+          timestamp: 1711234567000,
+          metadata: {
+            messageId: "wa-msg-123",
+            senderName: "Alice",
+            senderE164: "+4917600000001",
+            isGroup: false,
+          },
+        },
+        {
+          channelId: "whatsapp",
+          accountId: "main",
+          conversationId: "4917600000001@s.whatsapp.net",
+        },
+      );
+
+      const recent = db.getRecent({ limit: 10 });
+      expect(recent).toHaveLength(1);
+      expect(recent[0].content).toBe("Hello from main account");
+      expect(recent[0].source).toBe("pipeline");
+      expect(recent[0].message_type).toBe("message");
+      expect(recent[0].account_id).toBe("main");
+
+      db.close();
+    });
+
+    it("ignores non-whatsapp channels", () => {
+      const db = new ObserverDB(":memory:");
+      let called = false;
+
+      function messageReceivedHook(
+        _event: Record<string, unknown>,
+        ctx: Record<string, unknown>,
+      ): void {
+        if (ctx.channelId !== "whatsapp") return;
+        called = true;
+      }
+
+      messageReceivedHook(
+        { from: "user@telegram", content: "Telegram msg" },
+        { channelId: "telegram", accountId: "tg-1" },
+      );
+
+      expect(called).toBe(false);
+      db.close();
+    });
+  });
 });

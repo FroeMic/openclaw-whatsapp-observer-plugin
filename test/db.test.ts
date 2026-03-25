@@ -366,4 +366,142 @@ describe("ObserverDB", () => {
       expect(pruned).toBe(0);
     });
   });
+
+  describe("message types and sources", () => {
+    it("inserts a reaction message", () => {
+      db.insertMessage({
+        messageId: "react-1",
+        accountId: "observer-1",
+        sender: "+4917600000001",
+        conversationId: "c1@s.whatsapp.net",
+        isGroup: false,
+        content: "\u{1F44D}",
+        messageType: "reaction",
+        refMessageId: "original-msg-1",
+        source: "observer",
+        timestamp: Date.now(),
+      });
+
+      const recent = db.getRecent({ limit: 10 });
+      expect(recent).toHaveLength(1);
+      expect(recent[0].message_type).toBe("reaction");
+      expect(recent[0].ref_message_id).toBe("original-msg-1");
+      expect(recent[0].source).toBe("observer");
+      expect(recent[0].content).toBe("\u{1F44D}");
+    });
+
+    it("inserts a pipeline message", () => {
+      db.insertMessage({
+        messageId: "pipe-1",
+        accountId: "main",
+        sender: "+4917600000002",
+        conversationId: "c2@s.whatsapp.net",
+        isGroup: false,
+        content: "Hello from pipeline",
+        messageType: "message",
+        source: "pipeline",
+        timestamp: Date.now(),
+      });
+
+      const recent = db.getRecent({ limit: 10 });
+      expect(recent).toHaveLength(1);
+      expect(recent[0].source).toBe("pipeline");
+      expect(recent[0].message_type).toBe("message");
+    });
+
+    it("inserts a poll message", () => {
+      db.insertMessage({
+        messageId: "poll-1",
+        accountId: "observer-1",
+        sender: "+4917600000001",
+        conversationId: "group1@g.us",
+        isGroup: true,
+        content: "[poll] Lunch spot: Pizza, Sushi, Burgers",
+        messageType: "poll",
+        source: "observer",
+        timestamp: Date.now(),
+      });
+
+      const recent = db.getRecent({ limit: 10 });
+      expect(recent).toHaveLength(1);
+      expect(recent[0].message_type).toBe("poll");
+    });
+
+    it("inserts an edit message", () => {
+      db.insertMessage({
+        messageId: "edit-1",
+        accountId: "observer-1",
+        sender: "+4917600000001",
+        conversationId: "c1@s.whatsapp.net",
+        isGroup: false,
+        content: "Corrected text",
+        messageType: "edit",
+        refMessageId: "original-msg-2",
+        source: "observer",
+        timestamp: Date.now(),
+      });
+
+      const recent = db.getRecent({ limit: 10 });
+      expect(recent).toHaveLength(1);
+      expect(recent[0].message_type).toBe("edit");
+      expect(recent[0].ref_message_id).toBe("original-msg-2");
+    });
+
+    it("inserts a delete message", () => {
+      db.insertMessage({
+        messageId: "del-1",
+        accountId: "observer-1",
+        sender: "+4917600000001",
+        conversationId: "c1@s.whatsapp.net",
+        isGroup: false,
+        content: "[message deleted]",
+        messageType: "delete",
+        refMessageId: "original-msg-3",
+        source: "observer",
+        timestamp: Date.now(),
+      });
+
+      const recent = db.getRecent({ limit: 10 });
+      expect(recent).toHaveLength(1);
+      expect(recent[0].message_type).toBe("delete");
+    });
+
+    it("defaults to message type and observer source", () => {
+      db.insertMessage({
+        messageId: "default-1",
+        accountId: "observer-1",
+        sender: "+4917600000001",
+        conversationId: "c1@s.whatsapp.net",
+        isGroup: false,
+        content: "Normal message",
+        timestamp: Date.now(),
+      });
+
+      const recent = db.getRecent({ limit: 10 });
+      expect(recent).toHaveLength(1);
+      expect(recent[0].message_type).toBe("message");
+      expect(recent[0].source).toBe("observer");
+      expect(recent[0].ref_message_id).toBeNull();
+    });
+
+    it("search returns new columns", () => {
+      db.insertMessage({
+        messageId: "search-mt-1",
+        accountId: "observer-1",
+        sender: "+4917600000001",
+        senderName: "Alice",
+        conversationId: "c1@s.whatsapp.net",
+        isGroup: false,
+        content: "searchable reaction text",
+        messageType: "reaction",
+        source: "pipeline",
+        timestamp: Date.now(),
+      });
+
+      const results = db.search({ query: "searchable" });
+      expect(results).toHaveLength(1);
+      expect(results[0].message_type).toBe("reaction");
+      expect(results[0].source).toBe("pipeline");
+    });
+  });
 });

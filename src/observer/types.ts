@@ -10,6 +10,9 @@ export type ObserverFilters = {
   allowlist: string[];
 };
 
+export type MessageType = "message" | "reaction" | "poll" | "edit" | "delete";
+export type MessageSource = "observer" | "pipeline";
+
 export type ObserverMessage = {
   messageId?: string;
   accountId: string;
@@ -25,6 +28,9 @@ export type ObserverMessage = {
   mediaPath?: string;
   mediaMime?: string;
   timestamp: number;
+  messageType?: MessageType;
+  refMessageId?: string;
+  source?: MessageSource;
 };
 
 export type ObserverStats = {

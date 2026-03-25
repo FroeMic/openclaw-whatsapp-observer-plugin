@@ -52,15 +52,23 @@ CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
 END;
 `;
 
+const MIGRATION_SQL = `
+ALTER TABLE messages ADD COLUMN message_type TEXT NOT NULL DEFAULT 'message';
+ALTER TABLE messages ADD COLUMN ref_message_id TEXT;
+ALTER TABLE messages ADD COLUMN source TEXT NOT NULL DEFAULT 'observer';
+`;
+
 const INSERT_SQL = `
 INSERT OR IGNORE INTO messages (
   message_id, account_id, sender, sender_name, sender_e164,
   conversation_id, is_group, group_id, group_name,
-  content, media_type, media_path, media_mime, timestamp
+  content, media_type, media_path, media_mime, timestamp,
+  message_type, ref_message_id, source
 ) VALUES (
   @messageId, @accountId, @sender, @senderName, @senderE164,
   @conversationId, @isGroup, @groupId, @groupName,
-  @content, @mediaType, @mediaPath, @mediaMime, @timestamp
+  @content, @mediaType, @mediaPath, @mediaMime, @timestamp,
+  @messageType, @refMessageId, @source
 )`;
 
 export class ObserverDB {
@@ -75,6 +83,14 @@ export class ObserverDB {
 
   private init(): void {
     this.db.exec(SCHEMA_SQL);
+    // Migrate: add new columns for existing DBs (no-op on fresh DBs)
+    for (const stmt of MIGRATION_SQL.trim().split(";").filter(Boolean)) {
+      try {
+        this.db.exec(stmt.trim() + ";");
+      } catch {
+        // Column already exists — expected for fresh DBs where CREATE TABLE includes them
+      }
+    }
     this.db.exec(FTS_SQL);
     this.db.exec(FTS_TRIGGERS_SQL);
   }
@@ -95,6 +111,9 @@ export class ObserverDB {
       mediaPath: msg.mediaPath ?? null,
       mediaMime: msg.mediaMime ?? null,
       timestamp: msg.timestamp,
+      messageType: msg.messageType ?? "message",
+      refMessageId: msg.refMessageId ?? null,
+      source: msg.source ?? "observer",
     });
   }
 
@@ -141,7 +160,7 @@ export class ObserverDB {
       SELECT m.id, m.message_id, m.account_id, m.sender, m.sender_name,
              m.sender_e164, m.conversation_id, m.is_group, m.group_id,
              m.group_name, m.content, m.media_type, m.media_path,
-             m.timestamp, m.logged_at
+             m.timestamp, m.logged_at, m.message_type, m.ref_message_id, m.source
       FROM messages m
       WHERE ${conditions.join(" AND ")}
       ORDER BY m.timestamp DESC
@@ -175,7 +194,7 @@ export class ObserverDB {
       SELECT id, message_id, account_id, sender, sender_name,
              sender_e164, conversation_id, is_group, group_id,
              group_name, content, media_type, media_path,
-             timestamp, logged_at
+             timestamp, logged_at, message_type, ref_message_id, source
       FROM messages
       ${where}
       ORDER BY timestamp DESC

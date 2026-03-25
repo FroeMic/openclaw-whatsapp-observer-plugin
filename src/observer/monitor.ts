@@ -131,7 +131,102 @@ async function processObserverMessage(
   if (isBlocked(senderE164 ?? sender, remoteJid, ctx.config.filters)) return;
   if (!isAllowed(senderE164 ?? sender, remoteJid, ctx.config.filters)) return;
 
-  // Extract content
+  const timestamp = ((msg.messageTimestamp as number) ?? 0) * 1000 || Date.now();
+  const normalized = normalizeMessageContent(
+    msg.message as import("@whiskeysockets/baileys").proto.IMessage | undefined,
+  );
+
+  // --- Reaction message ---
+  const reactionMsg = normalized?.reactionMessage;
+  if (reactionMsg) {
+    ctx.db.insertMessage({
+      messageId: msg.key?.id ?? undefined,
+      accountId: ctx.accountId,
+      sender: senderE164 ?? sender,
+      senderName: msg.pushName ?? undefined,
+      senderE164: senderE164 ?? undefined,
+      conversationId: remoteJid,
+      isGroup,
+      content: reactionMsg.text || "[reaction removed]",
+      refMessageId: reactionMsg.key?.id ?? undefined,
+      messageType: "reaction",
+      source: "observer",
+      timestamp,
+    });
+    ctx.logger?.debug?.(`Observer ${ctx.accountId}: logged reaction from ${senderE164 ?? sender}`);
+    return;
+  }
+
+  // --- Poll creation ---
+  const pollMsg = normalized?.pollCreationMessage ?? normalized?.pollCreationMessageV3;
+  if (pollMsg) {
+    const options = pollMsg.options?.map((o) => o.optionName).join(", ") ?? "";
+    ctx.db.insertMessage({
+      messageId: msg.key?.id ?? undefined,
+      accountId: ctx.accountId,
+      sender: senderE164 ?? sender,
+      senderName: msg.pushName ?? undefined,
+      senderE164: senderE164 ?? undefined,
+      conversationId: remoteJid,
+      isGroup,
+      content: `[poll] ${pollMsg.name ?? "Poll"}: ${options}`,
+      messageType: "poll",
+      source: "observer",
+      timestamp,
+    });
+    ctx.logger?.debug?.(`Observer ${ctx.accountId}: logged poll from ${senderE164 ?? sender}`);
+    return;
+  }
+
+  // --- Protocol messages: edits and deletions ---
+  const protoMsg = normalized?.protocolMessage;
+  if (protoMsg) {
+    // Message edit
+    if (protoMsg.editedMessage) {
+      const editedText = extractText(
+        protoMsg.editedMessage as import("@whiskeysockets/baileys").proto.IMessage,
+      );
+      ctx.db.insertMessage({
+        messageId: msg.key?.id ?? undefined,
+        accountId: ctx.accountId,
+        sender: senderE164 ?? sender,
+        senderName: msg.pushName ?? undefined,
+        senderE164: senderE164 ?? undefined,
+        conversationId: remoteJid,
+        isGroup,
+        content: editedText ?? "[edited message]",
+        refMessageId: protoMsg.key?.id ?? undefined,
+        messageType: "edit",
+        source: "observer",
+        timestamp,
+      });
+      ctx.logger?.debug?.(`Observer ${ctx.accountId}: logged edit from ${senderE164 ?? sender}`);
+      return;
+    }
+    // Message deletion (type 0 = REVOKE)
+    if (protoMsg.type === 0 && protoMsg.key) {
+      ctx.db.insertMessage({
+        messageId: msg.key?.id ?? undefined,
+        accountId: ctx.accountId,
+        sender: senderE164 ?? sender,
+        senderName: msg.pushName ?? undefined,
+        senderE164: senderE164 ?? undefined,
+        conversationId: remoteJid,
+        isGroup,
+        content: "[message deleted]",
+        refMessageId: protoMsg.key.id ?? undefined,
+        messageType: "delete",
+        source: "observer",
+        timestamp,
+      });
+      ctx.logger?.debug?.(`Observer ${ctx.accountId}: logged deletion from ${senderE164 ?? sender}`);
+      return;
+    }
+    // Other protocol messages (e.g. ephemeral settings) — skip
+    return;
+  }
+
+  // --- Regular text/media message ---
   const text = extractText(msg.message as import("@whiskeysockets/baileys").proto.IMessage | undefined);
 
   let groupName: string | undefined;
@@ -156,7 +251,6 @@ async function processObserverMessage(
   }
 
   const mediaType = detectMediaType(msg.message as import("@whiskeysockets/baileys").proto.IMessage | undefined);
-  const timestamp = ((msg.messageTimestamp as number) ?? 0) * 1000;
 
   ctx.db.insertMessage({
     messageId: msg.key?.id ?? undefined,
@@ -171,7 +265,9 @@ async function processObserverMessage(
     mediaType,
     mediaPath: mediaLocalPath,
     mediaMime,
-    timestamp: timestamp || Date.now(),
+    messageType: "message",
+    source: "observer",
+    timestamp,
   });
 
   ctx.logger?.debug?.(
@@ -242,6 +338,37 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
             await processObserverMessage(msg, sock, { accountId, config, db, logger });
           } catch (err) {
             logger?.error(`Observer ${accountId}: message processing error: ${String(err)}`);
+          }
+        }
+      });
+
+      // Listen for reactions (separate Baileys event)
+      sock.ev.on("messages.reaction", (reactions) => {
+        for (const { key, reaction } of reactions) {
+          try {
+            const remoteJid = key.remoteJid;
+            if (!remoteJid) continue;
+            const reactorJid = reaction.key?.participant ?? reaction.key?.remoteJid ?? remoteJid;
+            const reactorE164 = jidToE164(reactorJid);
+
+            if (isBlocked(reactorE164 ?? reactorJid, remoteJid, config.filters)) continue;
+            if (!isAllowed(reactorE164 ?? reactorJid, remoteJid, config.filters)) continue;
+
+            db.insertMessage({
+              messageId: reaction.key?.id ?? undefined,
+              accountId,
+              sender: reactorE164 ?? reactorJid,
+              senderE164: reactorE164 ?? undefined,
+              conversationId: remoteJid,
+              isGroup: isJidGroup(remoteJid),
+              content: reaction.text || "[reaction removed]",
+              refMessageId: key.id ?? undefined,
+              messageType: "reaction",
+              source: "observer",
+              timestamp: Date.now(),
+            });
+          } catch (err) {
+            logger?.error(`Observer ${accountId}: reaction processing error: ${String(err)}`);
           }
         }
       });

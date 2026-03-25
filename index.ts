@@ -67,6 +67,34 @@ const plugin = {
         { priority: 9999 },
       );
 
+      // Log normal-path messages to the same DB
+      api.on("message_received", (event, ctx) => {
+        if (!ctx || !observerDb) return;
+        const hookCtx = ctx as Record<string, unknown>;
+        if (hookCtx.channelId !== "whatsapp") return;
+        const hookEvent = event as Record<string, unknown>;
+        const metadata = (hookEvent.metadata ?? {}) as Record<string, unknown>;
+
+        try {
+          observerDb.insertMessage({
+            messageId: (metadata.messageId as string) ?? undefined,
+            accountId: (hookCtx.accountId as string) ?? "unknown",
+            sender: hookEvent.from as string,
+            senderName: (metadata.senderName as string) ?? undefined,
+            senderE164: (metadata.senderE164 as string) ?? undefined,
+            conversationId: (hookCtx.conversationId as string) ?? (hookEvent.from as string),
+            isGroup: Boolean(metadata.isGroup),
+            groupName: (metadata.groupSubject as string) ?? undefined,
+            content: hookEvent.content as string,
+            timestamp: (hookEvent.timestamp as number) ?? Date.now(),
+            messageType: "message",
+            source: "pipeline",
+          });
+        } catch (err) {
+          api.logger.error(`[whatsapp-pro] Failed to log pipeline message: ${String(err)}`);
+        }
+      });
+
       api.logger.info(
         `[whatsapp-pro] Observer mode initialized (db: ${dbPath}, media: ${mediaPath})`,
       );
