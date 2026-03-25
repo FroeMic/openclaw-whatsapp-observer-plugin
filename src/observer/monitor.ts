@@ -116,10 +116,8 @@ async function processObserverMessage(
     logger?: ChannelLogSink;
   },
 ): Promise<void> {
+  console.log("[observer-debug]", JSON.stringify(msg, null, 2));
   const remoteJid = msg.key?.remoteJid;
-  ctx.logger?.info(
-    `Observer ${ctx.accountId}: processMsg remoteJid=${remoteJid} fromMe=${msg.key?.fromMe}`,
-  );
   if (!remoteJid) return;
   if (remoteJid.endsWith("@s.whatsapp.net") === false && remoteJid.endsWith("@g.us") === false) {
     ctx.logger?.info(`Observer ${ctx.accountId}: skipping non-chat JID: ${remoteJid}`);
