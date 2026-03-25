@@ -30,13 +30,21 @@ export default definePluginEntry({
     ObserverDB.create(dbPath).then((db) => {
       observerDb = db;
       setObserverState(db, resolvedConfig);
+      api.logger.info(`[whatsapp-pro] Observer DB ready`);
+    }).catch((err) => {
+      api.logger.error(`[whatsapp-pro] Observer DB init failed: ${String(err)}`);
     });
 
     // Register tools synchronously with lazy DB getter
-    registerObserverTools(api, () => {
-      if (!observerDb) throw new Error("Observer DB not yet initialized");
-      return observerDb;
-    });
+    try {
+      registerObserverTools(api, () => {
+        if (!observerDb) throw new Error("Observer DB not yet initialized");
+        return observerDb;
+      });
+      api.logger.info(`[whatsapp-pro] Tools registered`);
+    } catch (err) {
+      api.logger.error(`[whatsapp-pro] Tool registration failed: ${String(err)}`);
+    }
 
     // Log normal-path messages to the same DB
     api.on("message_received", (event, ctx) => {
