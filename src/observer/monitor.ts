@@ -117,9 +117,12 @@ async function processObserverMessage(
   },
 ): Promise<void> {
   const remoteJid = msg.key?.remoteJid;
+  ctx.logger?.info(
+    `Observer ${ctx.accountId}: processMsg remoteJid=${remoteJid} fromMe=${msg.key?.fromMe}`,
+  );
   if (!remoteJid) return;
   if (remoteJid.endsWith("@s.whatsapp.net") === false && remoteJid.endsWith("@g.us") === false) {
-    // Skip status, broadcast, newsletter, etc.
+    ctx.logger?.info(`Observer ${ctx.accountId}: skipping non-chat JID: ${remoteJid}`);
     return;
   }
 
