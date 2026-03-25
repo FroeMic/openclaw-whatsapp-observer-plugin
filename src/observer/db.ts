@@ -211,6 +211,7 @@ export class ObserverDB {
 
   getRecent(params: {
     conversationId?: string;
+    sender?: string;
     accountId?: string;
     limit?: number;
   }): Array<Record<string, unknown>> {
@@ -220,6 +221,11 @@ export class ObserverDB {
     if (params.conversationId) {
       conditions.push("conversation_id = :conversationId");
       binds[":conversationId"] = params.conversationId;
+    }
+    if (params.sender) {
+      conditions.push("(sender = :sender OR sender_e164 = :sender OR sender_name LIKE :senderLike)");
+      binds[":sender"] = params.sender;
+      binds[":senderLike"] = `%${params.sender}%`;
     }
     if (params.accountId) {
       conditions.push("account_id = :accountId");

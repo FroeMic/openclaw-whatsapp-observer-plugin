@@ -96,6 +96,9 @@ export function registerObserverTools(api: PluginApi, db: ObserverDB): void {
         conversationId: Type.Optional(
           Type.String({ description: "Filter by conversation JID" }),
         ),
+        sender: Type.Optional(
+          Type.String({ description: "Filter by sender (name, E.164 number, or JID)" }),
+        ),
         accountId: Type.Optional(
           Type.String({ description: "Filter by observer account ID" }),
         ),
@@ -107,12 +110,14 @@ export function registerObserverTools(api: PluginApi, db: ObserverDB): void {
         _toolCallId: string,
         params: {
           conversationId?: string;
+          sender?: string;
           accountId?: string;
           limit?: number;
         },
       ) {
         const results = db.getRecent({
           conversationId: params.conversationId,
+          sender: params.sender,
           accountId: params.accountId,
           limit: params.limit,
         });
