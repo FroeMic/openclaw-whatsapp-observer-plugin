@@ -58,11 +58,26 @@ INSERT OR IGNORE INTO messages (
   :messageType, :refMessageId, :source, :loggedAt
 )`;
 
+// Pre-load WASM — must be awaited before creating ObserverDB
+let sqlJsPromise: ReturnType<typeof initSqlJs> | null = null;
+export function preloadSqlJs(): ReturnType<typeof initSqlJs> {
+  if (!sqlJsPromise) {
+    sqlJsPromise = initSqlJs();
+  }
+  return sqlJsPromise;
+}
+// Start loading immediately on import
+preloadSqlJs();
+
 export class ObserverDB {
   private db: Database;
   private dbPath: string | null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * Create an ObserverDB. Call `await preloadSqlJs()` first to ensure
+   * the WASM module is ready, then this constructor is synchronous.
+   */
   constructor(db: Database, dbPath: string | null) {
     this.db = db;
     this.dbPath = dbPath;
@@ -70,7 +85,7 @@ export class ObserverDB {
   }
 
   static async create(dbPath: string | ":memory:"): Promise<ObserverDB> {
-    const SQL = await initSqlJs();
+    const SQL = await preloadSqlJs();
     let db: Database;
     if (dbPath === ":memory:") {
       db = new SQL.Database();
@@ -163,7 +178,6 @@ export class ObserverDB {
     const conditions: string[] = [];
     const binds: Record<string, unknown> = {};
 
-    // LIKE-based search (sql.js WASM doesn't include FTS5)
     const terms = params.query.split(/\s+/).filter(Boolean);
     for (let i = 0; i < terms.length; i++) {
       conditions.push(`(m.content LIKE :term${i} OR m.sender_name LIKE :term${i} OR m.group_name LIKE :term${i})`);

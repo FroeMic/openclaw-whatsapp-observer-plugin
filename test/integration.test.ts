@@ -96,13 +96,13 @@ describe("Integration", () => {
       const db = await ObserverDB.create(":memory:");
 
       // Simulate the hook logic from index.ts
-      function messageReceivedHook(
+      async function messageReceivedHook(
         event: Record<string, unknown>,
         ctx: Record<string, unknown>,
-      ): void {
+      ): Promise<void> {
         if (ctx.channelId !== "whatsapp") return;
         const metadata = (event.metadata ?? {}) as Record<string, unknown>;
-        db.insertMessage({
+        await db.insertMessage({
           messageId: (metadata.messageId as string) ?? undefined,
           accountId: (ctx.accountId as string) ?? "unknown",
           sender: event.from as string,
@@ -118,7 +118,7 @@ describe("Integration", () => {
         });
       }
 
-      messageReceivedHook(
+      await messageReceivedHook(
         {
           from: "+4917600000001",
           content: "Hello from main account",
@@ -137,7 +137,7 @@ describe("Integration", () => {
         },
       );
 
-      const recent = db.getRecent({ limit: 10 });
+      const recent = await db.getRecent({ limit: 10 });
       expect(recent).toHaveLength(1);
       expect(recent[0].content).toBe("Hello from main account");
       expect(recent[0].source).toBe("pipeline");

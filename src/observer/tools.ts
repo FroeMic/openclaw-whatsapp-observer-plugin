@@ -5,7 +5,14 @@ type PluginApi = {
   registerTool: (tool: Record<string, unknown>, opts?: { name: string }) => void;
 };
 
-export function registerObserverTools(api: PluginApi, db: ObserverDB): void {
+type ObserverDbProxy = {
+  search: ObserverDB["search"] | ((...args: Parameters<ObserverDB["search"]>) => Promise<ReturnType<ObserverDB["search"]>>);
+  getRecent: ObserverDB["getRecent"] | ((...args: Parameters<ObserverDB["getRecent"]>) => Promise<ReturnType<ObserverDB["getRecent"]>>);
+  listConversations: ObserverDB["listConversations"] | ((...args: Parameters<ObserverDB["listConversations"]>) => Promise<ReturnType<ObserverDB["listConversations"]>>);
+  getStats: ObserverDB["getStats"] | ((...args: Parameters<ObserverDB["getStats"]>) => Promise<ReturnType<ObserverDB["getStats"]>>);
+};
+
+export function registerObserverTools(api: PluginApi, db: ObserverDB | ObserverDbProxy): void {
   // Tool 1: Full-text search
   api.registerTool(
     {
@@ -47,7 +54,7 @@ export function registerObserverTools(api: PluginApi, db: ObserverDB): void {
           limit?: number;
         },
       ) {
-        const results = db.search({
+        const results = await db.search({
           query: params.query,
           sender: params.sender,
           group: params.group,
@@ -115,7 +122,7 @@ export function registerObserverTools(api: PluginApi, db: ObserverDB): void {
           limit?: number;
         },
       ) {
-        const results = db.getRecent({
+        const results = await db.getRecent({
           conversationId: params.conversationId,
           sender: params.sender,
           accountId: params.accountId,
@@ -170,7 +177,7 @@ export function registerObserverTools(api: PluginApi, db: ObserverDB): void {
         _toolCallId: string,
         params: { accountId?: string; limit?: number },
       ) {
-        const conversations = db.listConversations({
+        const conversations = await db.listConversations({
           accountId: params.accountId,
           limit: params.limit,
         });
@@ -235,7 +242,7 @@ export function registerObserverTools(api: PluginApi, db: ObserverDB): void {
           groupBy?: "sender" | "group" | "day" | "hour";
         },
       ) {
-        const stats = db.getStats({
+        const stats = await db.getStats({
           accountId: params.accountId,
           afterDate: params.afterDate ? new Date(params.afterDate).getTime() : undefined,
           groupBy: params.groupBy,

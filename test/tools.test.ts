@@ -18,7 +18,7 @@ describe("Observer Tools", () => {
     registerObserverTools(mockApi, db);
 
     // Seed test data
-    db.insertMessage({
+    await db.insertMessage({
       messageId: "t1",
       accountId: "obs-1",
       sender: "+4917600000001",
@@ -29,7 +29,7 @@ describe("Observer Tools", () => {
       content: "The deployment went smoothly",
       timestamp: new Date("2026-03-20T10:00:00Z").getTime(),
     });
-    db.insertMessage({
+    await db.insertMessage({
       messageId: "t2",
       accountId: "obs-1",
       sender: "+4917600000002",
@@ -40,7 +40,7 @@ describe("Observer Tools", () => {
       content: "Great, any issues with the deployment?",
       timestamp: new Date("2026-03-20T10:05:00Z").getTime(),
     });
-    db.insertMessage({
+    await db.insertMessage({
       messageId: "t3",
       accountId: "obs-1",
       sender: "+4917600000001",
