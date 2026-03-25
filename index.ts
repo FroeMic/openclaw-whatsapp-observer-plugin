@@ -43,12 +43,12 @@ export default defineChannelPluginEntry({
       return db;
     });
 
-    // Register tools synchronously — their execute() is async and awaits the DB
-    registerObserverTools(api, {
-      search: async (params) => (await ensureObserverDb()).search(params),
-      getRecent: async (params) => (await ensureObserverDb()).getRecent(params),
-      listConversations: async (params) => (await ensureObserverDb()).listConversations(params),
-      getStats: async (params) => (await ensureObserverDb()).getStats(params),
+    // Register tools synchronously with a lazy DB getter.
+    // Tool execute() callbacks are async and only run when the agent calls them,
+    // by which time the DB will be initialized.
+    registerObserverTools(api, () => {
+      if (!observerDb) throw new Error("Observer DB not yet initialized");
+      return observerDb;
     });
 
     // Log normal-path messages to the same DB

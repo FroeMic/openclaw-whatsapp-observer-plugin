@@ -5,14 +5,14 @@ type PluginApi = {
   registerTool: (tool: Record<string, unknown>, opts?: { name: string }) => void;
 };
 
-type ObserverDbProxy = {
-  search: ObserverDB["search"] | ((...args: Parameters<ObserverDB["search"]>) => Promise<ReturnType<ObserverDB["search"]>>);
-  getRecent: ObserverDB["getRecent"] | ((...args: Parameters<ObserverDB["getRecent"]>) => Promise<ReturnType<ObserverDB["getRecent"]>>);
-  listConversations: ObserverDB["listConversations"] | ((...args: Parameters<ObserverDB["listConversations"]>) => Promise<ReturnType<ObserverDB["listConversations"]>>);
-  getStats: ObserverDB["getStats"] | ((...args: Parameters<ObserverDB["getStats"]>) => Promise<ReturnType<ObserverDB["getStats"]>>);
-};
-
-export function registerObserverTools(api: PluginApi, db: ObserverDB | ObserverDbProxy): void {
+export function registerObserverTools(api: PluginApi, dbOrGetter: ObserverDB | (() => ObserverDB)): void {
+  const db = typeof dbOrGetter === "function"
+    ? new Proxy({} as ObserverDB, {
+        get(_target, prop) {
+          return (dbOrGetter() as Record<string, unknown>)[prop as string];
+        },
+      })
+    : dbOrGetter;
   // Tool 1: Full-text search
   api.registerTool(
     {
@@ -54,7 +54,7 @@ export function registerObserverTools(api: PluginApi, db: ObserverDB | ObserverD
           limit?: number;
         },
       ) {
-        const results = await db.search({
+        const results = db.search({
           query: params.query,
           sender: params.sender,
           group: params.group,
@@ -122,7 +122,7 @@ export function registerObserverTools(api: PluginApi, db: ObserverDB | ObserverD
           limit?: number;
         },
       ) {
-        const results = await db.getRecent({
+        const results = db.getRecent({
           conversationId: params.conversationId,
           sender: params.sender,
           accountId: params.accountId,
@@ -177,7 +177,7 @@ export function registerObserverTools(api: PluginApi, db: ObserverDB | ObserverD
         _toolCallId: string,
         params: { accountId?: string; limit?: number },
       ) {
-        const conversations = await db.listConversations({
+        const conversations = db.listConversations({
           accountId: params.accountId,
           limit: params.limit,
         });
@@ -242,7 +242,7 @@ export function registerObserverTools(api: PluginApi, db: ObserverDB | ObserverD
           groupBy?: "sender" | "group" | "day" | "hour";
         },
       ) {
-        const stats = await db.getStats({
+        const stats = db.getStats({
           accountId: params.accountId,
           afterDate: params.afterDate ? new Date(params.afterDate).getTime() : undefined,
           groupBy: params.groupBy,
