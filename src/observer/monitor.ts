@@ -116,6 +116,7 @@ async function processObserverMessage(
     logger?: ChannelLogSink;
   },
 ): Promise<void> {
+  console.log("[observer-debug]", JSON.stringify(msg, null, 2));
   // Resolve JID: prefer remoteJidAlt (E.164-based) when remoteJid uses LID format
   const rawJid = msg.key?.remoteJid;
   const altJid = (msg.key as Record<string, unknown>)?.remoteJidAlt as string | undefined;
