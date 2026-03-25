@@ -338,6 +338,9 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
 
       // CORE: Listen for messages, log to DB
       sock.ev.on("messages.upsert", async (upsert) => {
+        logger?.info(
+          `Observer ${accountId}: messages.upsert type=${upsert.type} count=${upsert.messages?.length ?? 0}`,
+        );
         if (upsert.type !== "notify") return;
         for (const msg of upsert.messages ?? []) {
           try {
