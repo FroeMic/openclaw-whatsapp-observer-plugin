@@ -1,4 +1,9 @@
 {
   "id": "whatsapp-pro",
-  "channels": ["whatsapp-pro"]
+  "channels": ["whatsapp-pro"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
 }
