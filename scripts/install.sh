@@ -4,23 +4,134 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 EXTENSION_DIR="${HOME}/.openclaw/extensions/whatsapp-pro"
+CONFIG_PATH="${HOME}/.openclaw/openclaw.json"
+
+# --- Parse flags ---
+MIGRATE=""  # empty = prompt, "yes" = --migrate, "no" = --no-migrate
+for arg in "$@"; do
+  case "$arg" in
+    --migrate)    MIGRATE="yes" ;;
+    --no-migrate) MIGRATE="no" ;;
+    --help|-h)
+      echo "Usage: install.sh [OPTIONS]"
+      echo ""
+      echo "Install the WhatsApp Pro plugin into an existing openclaw installation."
+      echo ""
+      echo "Options:"
+      echo "  --migrate      Migrate existing channels.whatsapp config to whatsapp-pro"
+      echo "  --no-migrate   Disable built-in whatsapp without migrating config"
+      echo "  -h, --help     Show this help"
+      echo ""
+      echo "If neither flag is given and channels.whatsapp config exists, you will be prompted."
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg (use --help for usage)"
+      exit 1
+      ;;
+  esac
+done
 
 echo ""
 echo "WhatsApp Pro — Plugin Install"
 echo "=============================="
 echo ""
 
-# Disable built-in whatsapp plugin
-echo "Disabling built-in whatsapp plugin..."
-openclaw plugins disable whatsapp 2>/dev/null || true
+# --- Backup config (same pattern as openclaw doctor) ---
+if [ -f "$CONFIG_PATH" ]; then
+  BACKUP_PATH="${CONFIG_PATH}.pre-whatsapp-pro.bak"
+  cp "$CONFIG_PATH" "$BACKUP_PATH"
+  echo "Config backed up to: $BACKUP_PATH"
+fi
 
-# Remove previous install if exists
+# --- Check for existing whatsapp config and decide migration ---
+HAS_WA_CONFIG=$(node -e "
+  const fs = require('fs');
+  try {
+    const cfg = JSON.parse(fs.readFileSync('$CONFIG_PATH', 'utf8'));
+    const wa = cfg.channels?.whatsapp;
+    // Has meaningful config (not just {enabled: false})
+    const hasAccounts = wa?.accounts && Object.keys(wa.accounts).length > 0;
+    const hasPolicy = wa?.dmPolicy || wa?.groupPolicy || wa?.allowFrom;
+    console.log(hasAccounts || hasPolicy ? 'yes' : 'no');
+  } catch { console.log('no'); }
+" 2>/dev/null || echo "no")
+
+if [ "$HAS_WA_CONFIG" = "yes" ] && [ -z "$MIGRATE" ]; then
+  echo "Existing WhatsApp channel config found (channels.whatsapp)."
+  read -rp "Migrate to whatsapp-pro? [Y/n]: " CHOICE
+  case "$CHOICE" in
+    [nN]|[nN][oO]) MIGRATE="no" ;;
+    *)             MIGRATE="yes" ;;
+  esac
+elif [ "$HAS_WA_CONFIG" = "no" ]; then
+  MIGRATE="no"
+fi
+
+# --- Migrate or disable built-in whatsapp ---
+if [ "$MIGRATE" = "yes" ]; then
+  echo "Migrating channels.whatsapp → channels.whatsapp-pro..."
+  node -e "
+    const fs = require('fs');
+    const configPath = '$CONFIG_PATH';
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+    const waConfig = cfg.channels?.whatsapp;
+    if (!waConfig) {
+      console.log('  No channels.whatsapp to migrate.');
+      process.exit(0);
+    }
+
+    // Copy whatsapp config to whatsapp-pro (preserve observer if already present)
+    const existing = cfg.channels['whatsapp-pro'] || {};
+    const migrated = { ...waConfig, ...existing };
+    delete migrated.enabled;  // whatsapp-pro manages its own enable state
+
+    cfg.channels['whatsapp-pro'] = migrated;
+    delete cfg.channels.whatsapp;
+
+    // Also clean up plugins.entries.whatsapp
+    if (cfg.plugins?.entries?.whatsapp) {
+      delete cfg.plugins.entries.whatsapp;
+    }
+
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
+    const accountCount = Object.keys(migrated.accounts || {}).length;
+    console.log('  Migrated ' + accountCount + ' account(s) to channels.whatsapp-pro');
+    console.log('  Removed channels.whatsapp');
+  "
+else
+  echo "Disabling built-in whatsapp plugin..."
+  openclaw plugins disable whatsapp 2>/dev/null || true
+  # Clean up the stale config entries left by 'plugins disable'
+  node -e "
+    const fs = require('fs');
+    const configPath = '$CONFIG_PATH';
+    if (!fs.existsSync(configPath)) process.exit(0);
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    let changed = false;
+    if (cfg.channels?.whatsapp) {
+      delete cfg.channels.whatsapp;
+      changed = true;
+    }
+    if (cfg.plugins?.entries?.whatsapp) {
+      delete cfg.plugins.entries.whatsapp;
+      changed = true;
+    }
+    if (changed) {
+      fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
+      console.log('  Cleaned up stale whatsapp config entries.');
+    }
+  " 2>/dev/null || true
+fi
+
+# --- Remove previous install if exists ---
 if [ -d "$EXTENSION_DIR" ]; then
   echo "Removing previous install..."
   rm -rf "$EXTENSION_DIR"
 fi
 
-# Install plugin
+# --- Install plugin ---
 echo "Installing whatsapp-pro plugin..."
 openclaw plugins install "$PLUGIN_DIR"
 
@@ -30,7 +141,7 @@ OPENCLAW_ROOT="$(dirname "$(readlink -f "$(which openclaw)")")"
 mkdir -p "$EXTENSION_DIR/node_modules"
 ln -sf "$OPENCLAW_ROOT" "$EXTENSION_DIR/node_modules/openclaw"
 
-# Install and link wa-pro CLI
+# --- Install and link wa-pro CLI ---
 echo "Installing wa-pro CLI..."
 CLI_DIR="$PLUGIN_DIR/cli"
 cd "$CLI_DIR" && npm install --no-fund --no-audit
