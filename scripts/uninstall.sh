@@ -46,9 +46,9 @@ else
   openclaw plugins uninstall "$PLUGIN_ID" --force 2>/dev/null || true
 fi
 
-# Remove channel config section (openclaw plugins uninstall doesn't touch channels.*)
+# Remove channel config and plugin entry config (openclaw plugins uninstall doesn't touch channels.*)
 if ! $KEEP_CONFIG; then
-  echo "Removing channels.whatsapp-pro config..."
+  echo "Removing whatsapp-pro config from openclaw.json..."
   node -e "
     const fs = require('fs');
     const path = require('path');
@@ -59,20 +59,43 @@ if ! $KEEP_CONFIG; then
     }
     const raw = fs.readFileSync(configPath, 'utf8');
     const config = JSON.parse(raw);
+    let changed = false;
+
+    // Remove channels.whatsapp-pro (new config layout)
     if (config.channels && config.channels['whatsapp-pro']) {
       delete config.channels['whatsapp-pro'];
-      // Clean up empty channels object
-      if (Object.keys(config.channels).length === 0) {
-        delete config.channels;
-      }
+      if (Object.keys(config.channels).length === 0) delete config.channels;
+      console.log('  Removed channels.whatsapp-pro');
+      changed = true;
+    }
+
+    // Remove plugins.entries.whatsapp-pro (includes old observer config)
+    if (config.plugins?.entries?.['whatsapp-pro']) {
+      delete config.plugins.entries['whatsapp-pro'];
+      if (Object.keys(config.plugins.entries).length === 0) delete config.plugins.entries;
+      if (config.plugins && Object.keys(config.plugins).length === 0) delete config.plugins;
+      console.log('  Removed plugins.entries.whatsapp-pro');
+      changed = true;
+    }
+
+    // Remove disabled whatsapp entry left behind by install.sh
+    if (config.plugins?.entries?.whatsapp?.enabled === false) {
+      delete config.plugins.entries.whatsapp;
+      if (Object.keys(config.plugins.entries).length === 0) delete config.plugins.entries;
+      if (config.plugins && Object.keys(config.plugins).length === 0) delete config.plugins;
+      console.log('  Removed disabled plugins.entries.whatsapp');
+      changed = true;
+    }
+
+    if (changed) {
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-      console.log('  Removed channels.whatsapp-pro from openclaw.json');
+      console.log('  openclaw.json updated.');
     } else {
-      console.log('  No channels.whatsapp-pro config found, skipping.');
+      console.log('  No whatsapp-pro config found, skipping.');
     }
   "
 else
-  echo "Keeping channels.whatsapp-pro config (--keep-config)."
+  echo "Keeping whatsapp-pro config (--keep-config)."
 fi
 
 # Remove leftover extension directory if it still exists
