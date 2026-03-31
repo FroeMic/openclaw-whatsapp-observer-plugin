@@ -13,6 +13,7 @@ import {
 } from "openclaw/plugin-sdk/security-runtime";
 import { isSelfChatMode, normalizeE164 } from "openclaw/plugin-sdk/text-runtime";
 import { resolveWhatsAppAccount } from "../accounts.js";
+import { getChannelConfig } from "../channel-config.js";
 
 export type InboundAccessControlResult = {
   allowed: boolean;
@@ -62,7 +63,7 @@ export async function checkInboundAccessControl(params: {
   const dmPolicy = account.dmPolicy ?? "pairing";
   const configuredAllowFrom = account.allowFrom ?? [];
   const storeAllowFrom = await readStoreAllowFromForDmPolicy({
-    provider: "whatsapp",
+    provider: "whatsapp-pro",
     accountId: account.accountId,
     dmPolicy,
   });
@@ -89,13 +90,13 @@ export async function checkInboundAccessControl(params: {
   // - "allowlist": only allow group messages from senders in groupAllowFrom/allowFrom
   const defaultGroupPolicy = resolveDefaultGroupPolicy(cfg);
   const { groupPolicy, providerMissingFallbackApplied } = resolveWhatsAppRuntimeGroupPolicy({
-    providerConfigPresent: cfg.channels?.whatsapp !== undefined,
+    providerConfigPresent: getChannelConfig(cfg) !== undefined,
     groupPolicy: account.groupPolicy,
     defaultGroupPolicy,
   });
   warnMissingProviderGroupPolicyFallbackOnce({
     providerMissingFallbackApplied,
-    providerKey: "whatsapp",
+    providerKey: "whatsapp-pro",
     accountId: account.accountId,
     log: (message) => logVerbose(message),
   });
@@ -172,10 +173,10 @@ export async function checkInboundAccessControl(params: {
         logVerbose(`Skipping pairing reply for historical DM from ${candidate}.`);
       } else {
         await createChannelPairingChallengeIssuer({
-          channel: "whatsapp",
+          channel: "whatsapp-pro",
           upsertPairingRequest: async ({ id, meta }) =>
             await upsertChannelPairingRequest({
-              channel: "whatsapp",
+              channel: "whatsapp-pro",
               id,
               accountId: account.accountId,
               meta,

@@ -9,22 +9,21 @@ import {
   resolveStorePath,
 } from "openclaw/plugin-sdk/config-runtime";
 import { normalizeGroupActivation } from "openclaw/plugin-sdk/reply-runtime";
+import { getChannelConfig } from "../../channel-config.js";
 
 export function resolveGroupPolicyFor(cfg: ReturnType<typeof loadConfig>, conversationId: string) {
   const groupId = resolveGroupSessionKey({
     From: conversationId,
     ChatType: "group",
-    Provider: "whatsapp",
+    Provider: "whatsapp-pro",
   })?.id;
-  const whatsappCfg = cfg.channels?.whatsapp as
-    | { groupAllowFrom?: string[]; allowFrom?: string[] }
-    | undefined;
+  const whatsappCfg = getChannelConfig(cfg);
   const hasGroupAllowFrom = Boolean(
     whatsappCfg?.groupAllowFrom?.length || whatsappCfg?.allowFrom?.length,
   );
   return resolveChannelGroupPolicy({
     cfg,
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     groupId: groupId ?? conversationId,
     hasGroupAllowFrom,
   });
@@ -37,11 +36,11 @@ export function resolveGroupRequireMentionFor(
   const groupId = resolveGroupSessionKey({
     From: conversationId,
     ChatType: "group",
-    Provider: "whatsapp",
+    Provider: "whatsapp-pro",
   })?.id;
   return resolveChannelGroupRequireMention({
     cfg,
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     groupId: groupId ?? conversationId,
   });
 }

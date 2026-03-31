@@ -46,6 +46,7 @@ import {
   isWhatsAppGroupJid,
   normalizeWhatsAppTarget,
 } from "./runtime-api.js";
+import { getChannelConfig } from "./channel-config.js";
 import { getWhatsAppRuntime } from "./runtime.js";
 import { resolveWhatsAppOutboundSessionRoute } from "./session-route.js";
 import { whatsappSetupAdapter } from "./setup-core.js";
@@ -107,7 +108,7 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
       }),
       agentTools: () => [getWhatsAppRuntime().channel.whatsapp.createLoginTool()],
       allowlist: buildDmGroupAccountAllowlistAdapter({
-        channelId: "whatsapp",
+        channelId: WHATSAPP_CHANNEL,
         resolveAccount: resolveWhatsAppAccount,
         normalize: ({ values }) => formatWhatsAppConfigAllowFromEntries(values),
         resolveDmAllowFrom: (account) => account.allowFrom,
@@ -152,10 +153,11 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
       },
       actions: {
         describeMessageTool: ({ cfg }) => {
-          if (!cfg.channels?.whatsapp) {
+          const channelCfg = getChannelConfig(cfg);
+          if (!channelCfg) {
             return null;
           }
-          const gate = createActionGate(cfg.channels.whatsapp.actions);
+          const gate = createActionGate(channelCfg.actions);
           const actions = new Set<ChannelMessageActionName>();
           if (gate("reactions")) {
             actions.add("react");

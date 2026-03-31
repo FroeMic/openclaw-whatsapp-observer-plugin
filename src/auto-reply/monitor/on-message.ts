@@ -66,7 +66,7 @@ export function createWebOnMessageHandler(params: {
     // Fresh config for bindings lookup; other routing inputs are payload-derived.
     const route = resolveAgentRoute({
       cfg: loadConfig(),
-      channel: "whatsapp",
+      channel: "whatsapp-pro",
       accountId: msg.accountId,
       peer: {
         kind: msg.chatType === "group" ? "group" : "direct",
@@ -76,7 +76,7 @@ export function createWebOnMessageHandler(params: {
     const groupHistoryKey =
       msg.chatType === "group"
         ? buildGroupHistoryKey({
-            channel: "whatsapp",
+            channel: "whatsapp-pro",
             accountId: route.accountId,
             peerKind: "group",
             peerId,
@@ -107,9 +107,9 @@ export function createWebOnMessageHandler(params: {
         SenderName: msg.senderName,
         SenderId: msg.senderJid?.trim() || msg.senderE164,
         SenderE164: msg.senderE164,
-        Provider: "whatsapp",
-        Surface: "whatsapp",
-        OriginatingChannel: "whatsapp",
+        Provider: "whatsapp-pro",
+        Surface: "whatsapp-pro",
+        OriginatingChannel: "whatsapp-pro",
         OriginatingTo: conversationId,
       } satisfies MsgContext;
       updateLastRouteInBackground({
@@ -117,7 +117,7 @@ export function createWebOnMessageHandler(params: {
         backgroundTasks: params.backgroundTasks,
         storeAgentId: route.agentId,
         sessionKey: route.sessionKey,
-        channel: "whatsapp",
+        channel: "whatsapp-pro",
         to: conversationId,
         accountId: route.accountId,
         ctx: metaCtx,

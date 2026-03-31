@@ -13,6 +13,7 @@ import { registerUnhandledRejectionHandler } from "openclaw/plugin-sdk/runtime-e
 import { getChildLogger } from "openclaw/plugin-sdk/runtime-env";
 import { defaultRuntime, type RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
 import { resolveWhatsAppAccount, resolveWhatsAppMediaMaxBytes } from "../accounts.js";
+import { getChannelConfig } from "../channel-config.js";
 import { setActiveWebListener } from "../active-listener.js";
 import { monitorWebInbox } from "../inbound.js";
 import {
@@ -108,8 +109,8 @@ export async function monitorWebChannel(
   const reconnectPolicy = resolveReconnectPolicy(cfg, tuning.reconnect);
   const baseMentionConfig = buildMentionConfig(cfg);
   const groupHistoryLimit =
-    cfg.channels?.whatsapp?.accounts?.[tuning.accountId ?? ""]?.historyLimit ??
-    cfg.channels?.whatsapp?.historyLimit ??
+    getChannelConfig(cfg)?.accounts?.[tuning.accountId ?? ""]?.historyLimit ??
+    getChannelConfig(cfg)?.historyLimit ??
     cfg.messages?.groupChat?.historyLimit ??
     DEFAULT_GROUP_HISTORY_LIMIT;
   const groupHistories = new Map<
@@ -180,7 +181,7 @@ export async function monitorWebChannel(
       account,
     });
 
-    const inboundDebounceMs = resolveInboundDebounceMs({ cfg, channel: "whatsapp" });
+    const inboundDebounceMs = resolveInboundDebounceMs({ cfg, channel: "whatsapp-pro" });
     const shouldDebounce = (msg: WebInboundMsg) => {
       if (msg.mediaPath || msg.mediaType) {
         return false;
@@ -216,7 +217,7 @@ export async function monitorWebChannel(
     const { e164: selfE164 } = readWebSelfId(account.authDir);
     const connectRoute = resolveAgentRoute({
       cfg,
-      channel: "whatsapp",
+      channel: "whatsapp-pro",
       accountId: account.accountId,
     });
     enqueueSystemEvent(`WhatsApp gateway connected${selfE164 ? ` as ${selfE164}` : ""}.`, {

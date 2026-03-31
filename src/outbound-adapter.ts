@@ -29,10 +29,10 @@ export const whatsappOutbound: ChannelOutboundAdapter = {
     const text = trimLeadingWhitespace(ctx.payload.text);
     const hasMedia = resolveSendableOutboundReplyParts(ctx.payload).hasMedia;
     if (!text && !hasMedia) {
-      return createEmptyChannelResult("whatsapp");
+      return createEmptyChannelResult("whatsapp-pro");
     }
     return await sendTextMediaPayload({
-      channel: "whatsapp",
+      channel: "whatsapp-pro",
       ctx: {
         ...ctx,
         payload: {
@@ -44,14 +44,14 @@ export const whatsappOutbound: ChannelOutboundAdapter = {
     });
   },
   ...createAttachedChannelResultAdapter({
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     sendText: async ({ cfg, to, text, accountId, deps, gifPlayback }) => {
       const normalizedText = trimLeadingWhitespace(text);
       if (!normalizedText) {
-        return createEmptyChannelResult("whatsapp");
+        return createEmptyChannelResult("whatsapp-pro");
       }
       const send =
-        resolveOutboundSendDep<typeof import("./send.js").sendMessageWhatsApp>(deps, "whatsapp") ??
+        resolveOutboundSendDep<typeof import("./send.js").sendMessageWhatsApp>(deps, "whatsapp-pro") ??
         (await import("./send.js")).sendMessageWhatsApp;
       return await send(to, normalizedText, {
         verbose: false,
@@ -72,7 +72,7 @@ export const whatsappOutbound: ChannelOutboundAdapter = {
     }) => {
       const normalizedText = trimLeadingWhitespace(text);
       const send =
-        resolveOutboundSendDep<typeof import("./send.js").sendMessageWhatsApp>(deps, "whatsapp") ??
+        resolveOutboundSendDep<typeof import("./send.js").sendMessageWhatsApp>(deps, "whatsapp-pro") ??
         (await import("./send.js")).sendMessageWhatsApp;
       return await send(to, normalizedText, {
         verbose: false,

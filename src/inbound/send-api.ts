@@ -5,7 +5,7 @@ import type { ActiveWebSendOptions } from "../active-listener.js";
 
 function recordWhatsAppOutbound(accountId: string) {
   recordChannelActivity({
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     accountId,
     direction: "outbound",
   });

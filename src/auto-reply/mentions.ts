@@ -1,5 +1,6 @@
 import { buildMentionRegexes, normalizeMentionText } from "openclaw/plugin-sdk/channel-inbound";
 import type { loadConfig } from "openclaw/plugin-sdk/config-runtime";
+import { getChannelConfig } from "../channel-config.js";
 import { isSelfChatMode, jidToE164, normalizeE164 } from "openclaw/plugin-sdk/text-runtime";
 import type { WebInboundMsg } from "./types.js";
 
@@ -19,7 +20,7 @@ export function buildMentionConfig(
   agentId?: string,
 ): MentionConfig {
   const mentionRegexes = buildMentionRegexes(cfg, agentId);
-  return { mentionRegexes, allowFrom: cfg.channels?.whatsapp?.allowFrom };
+  return { mentionRegexes, allowFrom: getChannelConfig(cfg)?.allowFrom };
 }
 
 export function resolveMentionTargets(msg: WebInboundMsg, authDir?: string): MentionTargets {

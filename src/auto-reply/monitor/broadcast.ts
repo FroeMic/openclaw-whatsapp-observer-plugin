@@ -20,7 +20,7 @@ function buildBroadcastRouteKeys(params: {
 }) {
   const sessionKey = buildAgentSessionKey({
     agentId: params.agentId,
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     accountId: params.route.accountId,
     peer: {
       kind: params.msg.chatType === "group" ? "group" : "direct",

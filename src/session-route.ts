@@ -13,7 +13,7 @@ export function resolveWhatsAppOutboundSessionRoute(params: ChannelOutboundSessi
   return buildChannelOutboundSessionRoute({
     cfg: params.cfg,
     agentId: params.agentId,
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     accountId: params.accountId,
     peer: {
       kind: isGroup ? "group" : "direct",

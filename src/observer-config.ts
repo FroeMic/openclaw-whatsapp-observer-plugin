@@ -1,3 +1,4 @@
+import type { WhatsAppProChannelConfig } from "./channel-config.js";
 import type { ObserverConfig } from "./observer/types.js";
 
 const DEFAULT_DB_PATH = "~/.openclaw/whatsapp-observer/messages.db";
@@ -5,27 +6,20 @@ const DEFAULT_MEDIA_PATH = "~/.openclaw/whatsapp-observer/media";
 const DEFAULT_RETENTION_DAYS = 90;
 
 export function parseObserverConfig(
-  pluginConfig: Record<string, unknown> | undefined,
+  channelConfig: WhatsAppProChannelConfig | undefined,
 ): ObserverConfig {
-  const raw = (pluginConfig?.observer ?? {}) as Record<string, unknown>;
+  const raw = channelConfig?.observer;
 
-  const dbPath = typeof raw.dbPath === "string" ? raw.dbPath : DEFAULT_DB_PATH;
-  const mediaPath = typeof raw.mediaPath === "string" ? raw.mediaPath : DEFAULT_MEDIA_PATH;
+  const dbPath = typeof raw?.dbPath === "string" ? raw.dbPath : DEFAULT_DB_PATH;
+  const mediaPath = typeof raw?.mediaPath === "string" ? raw.mediaPath : DEFAULT_MEDIA_PATH;
   const retentionDays =
-    typeof raw.retentionDays === "number" ? raw.retentionDays : DEFAULT_RETENTION_DAYS;
+    typeof raw?.retentionDays === "number" ? raw.retentionDays : DEFAULT_RETENTION_DAYS;
 
-  const rawFilters = raw.filters as Record<string, unknown> | undefined;
-  const blocklist = Array.isArray(rawFilters?.blocklist)
-    ? (rawFilters.blocklist as string[])
-    : [];
-  const allowlist = Array.isArray(rawFilters?.allowlist)
-    ? (rawFilters.allowlist as string[])
-    : ["*"];
+  const blocklist = Array.isArray(raw?.filters?.blocklist) ? raw.filters.blocklist : [];
+  const allowlist = Array.isArray(raw?.filters?.allowlist) ? raw.filters.allowlist : ["*"];
 
-  // Observer account IDs stored in plugin config, not in channels.whatsapp
-  const observerAccounts = Array.isArray(raw.accounts)
-    ? (raw.accounts as string[])
-    : [];
+  // Observer account IDs stored in channels.whatsapp-pro.observer.accounts
+  const observerAccounts = Array.isArray(raw?.accounts) ? raw.accounts : [];
 
   return { dbPath, mediaPath, filters: { blocklist, allowlist }, retentionDays, observerAccounts };
 }

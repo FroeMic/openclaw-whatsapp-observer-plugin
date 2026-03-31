@@ -1,0 +1,50 @@
+import { z } from "zod";
+import { WhatsAppConfigSchema, type OpenClawConfig } from "./runtime-api.js";
+
+/**
+ * Zod schema for the observer-specific section of the channel config.
+ */
+export const ObserverConfigSchema = z.object({
+  accounts: z.array(z.string()).optional(),
+  dbPath: z.string().optional(),
+  mediaPath: z.string().optional(),
+  filters: z
+    .object({
+      blocklist: z.array(z.string()).optional(),
+      allowlist: z.array(z.string()).optional(),
+    })
+    .optional(),
+  retentionDays: z.number().optional(),
+});
+
+/**
+ * Full channel config schema for "whatsapp-pro".
+ *
+ * Extends the standard WhatsApp config schema with observer fields.
+ * Since WhatsAppConfigSchema uses .strict().superRefine() we cannot call
+ * .extend() on it directly, so we reconstruct via .passthrough() + merge.
+ */
+export const WhatsAppProConfigSchema = WhatsAppConfigSchema.passthrough().and(
+  z.object({ observer: ObserverConfigSchema.optional() }),
+);
+
+/** Inferred TypeScript type for the full whatsapp-pro channel config. */
+export type WhatsAppProChannelConfig = z.infer<typeof WhatsAppProConfigSchema>;
+
+/**
+ * Type-safe accessor for the `channels["whatsapp-pro"]` config section.
+ *
+ * Since ChannelsConfig uses `[key: string]: any` for extension channels,
+ * accessing `cfg.channels?.["whatsapp-pro"]` returns `any`. This function
+ * narrows it once at the boundary so the rest of the codebase stays type-safe.
+ *
+ * Returns `undefined` when the section is missing or not an object.
+ */
+export function getChannelConfig(cfg: OpenClawConfig): WhatsAppProChannelConfig | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- upstream `[key: string]: any` index signature
+  const raw = cfg.channels?.["whatsapp-pro"];
+  if (typeof raw !== "object" || raw === null) {
+    return undefined;
+  }
+  return raw as WhatsAppProChannelConfig;
+}

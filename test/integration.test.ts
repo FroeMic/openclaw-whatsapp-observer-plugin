@@ -100,7 +100,7 @@ describe("Integration", () => {
         event: Record<string, unknown>,
         ctx: Record<string, unknown>,
       ): Promise<void> {
-        if (ctx.channelId !== "whatsapp") return;
+        if (ctx.channelId !== "whatsapp-pro") return;
         const metadata = (event.metadata ?? {}) as Record<string, unknown>;
         await db.insertMessage({
           messageId: (metadata.messageId as string) ?? undefined,
@@ -131,7 +131,7 @@ describe("Integration", () => {
           },
         },
         {
-          channelId: "whatsapp",
+          channelId: "whatsapp-pro",
           accountId: "main",
           conversationId: "4917600000001@s.whatsapp.net",
         },
@@ -155,7 +155,7 @@ describe("Integration", () => {
         _event: Record<string, unknown>,
         ctx: Record<string, unknown>,
       ): void {
-        if (ctx.channelId !== "whatsapp") return;
+        if (ctx.channelId !== "whatsapp-pro") return;
         called = true;
       }
 

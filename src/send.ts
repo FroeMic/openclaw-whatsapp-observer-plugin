@@ -43,7 +43,7 @@ export async function sendMessageWhatsApp(
   });
   const tableMode = resolveMarkdownTableMode({
     cfg,
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     accountId: resolvedAccountId ?? options.accountId,
   });
   text = convertMarkdownTables(text ?? "", tableMode);

@@ -18,7 +18,7 @@ export function updateLastRouteInBackground(params: {
   backgroundTasks: Set<Promise<unknown>>;
   storeAgentId: string;
   sessionKey: string;
-  channel: "whatsapp";
+  channel: "whatsapp-pro";
   to: string;
   accountId?: string;
   ctx?: MsgContext;

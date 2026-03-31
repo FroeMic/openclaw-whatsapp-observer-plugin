@@ -34,19 +34,19 @@ echo ""
 openclaw gateway stop 2>/dev/null || true
 
 # Enable the WhatsApp account
-openclaw config set channels.whatsapp.accounts."$ACCOUNT_ID".enabled true
+openclaw config set channels.whatsapp-pro.accounts."$ACCOUNT_ID".enabled true
 
 if [ "$MODE" = "normal" ]; then
-  openclaw config set channels.whatsapp.accounts."$ACCOUNT_ID".dmPolicy pairing
+  openclaw config set channels.whatsapp-pro.accounts."$ACCOUNT_ID".dmPolicy pairing
 fi
 
 # Ensure plugin is enabled
 openclaw config set plugins.entries.whatsapp-pro.enabled true
 
 if [ "$MODE" = "observer" ]; then
-  # Add account to observer accounts list in plugin config
+  # Add account to observer accounts list in channel config
   # Use node to safely build the JSON array
-  CURRENT=$(openclaw config get plugins.entries.whatsapp-pro.config.observer.accounts 2>/dev/null || echo "[]")
+  CURRENT=$(openclaw config get channels.whatsapp-pro.observer.accounts 2>/dev/null || echo "[]")
   NEW_LIST=$(node -e "
     let arr;
     try { arr = JSON.parse(process.argv[1]); } catch { arr = []; }
@@ -55,7 +55,7 @@ if [ "$MODE" = "observer" ]; then
     if (!arr.includes(id)) arr.push(id);
     console.log(JSON.stringify(arr));
   " "$CURRENT" "$ACCOUNT_ID")
-  openclaw config set plugins.entries.whatsapp-pro.config.observer.accounts "$NEW_LIST"
+  openclaw config set channels.whatsapp-pro.observer.accounts "$NEW_LIST"
 fi
 
 echo ""
@@ -64,7 +64,7 @@ echo "Scan the QR code with your phone (WhatsApp > Linked Devices > Link a Devic
 echo ""
 
 # Login
-openclaw channels login --channel whatsapp --account "$ACCOUNT_ID"
+openclaw channels login --channel whatsapp-pro --account "$ACCOUNT_ID"
 
 echo ""
 echo "$MODE account '$ACCOUNT_ID' is linked."

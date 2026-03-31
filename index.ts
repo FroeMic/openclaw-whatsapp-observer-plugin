@@ -1,6 +1,7 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { whatsappPlugin, setObserverState } from "./src/channel.js";
 import { setWhatsAppRuntime } from "./src/runtime.js";
+import { getChannelConfig } from "./src/channel-config.js";
 import { parseObserverConfig, isObserverAccount } from "./src/observer-config.js";
 import { ObserverDB, preloadSqlJs } from "./src/observer/db.js";
 import { registerObserverTools } from "./src/observer/tools.js";
@@ -21,7 +22,7 @@ export default definePluginEntry({
     api.registerChannel({ plugin: whatsappPlugin });
 
     // Observer setup — DB init + tool registration + hooks
-    const config = parseObserverConfig(api.pluginConfig);
+    const config = parseObserverConfig(getChannelConfig(api.config));
     const dbPath = api.resolvePath(config.dbPath);
     const mediaPath = api.resolvePath(config.mediaPath);
     const resolvedConfig = { ...config, dbPath, mediaPath };
@@ -50,7 +51,7 @@ export default definePluginEntry({
     api.on("message_received", (event, ctx) => {
       if (!ctx || !observerDb) return;
       const hookCtx = ctx as Record<string, unknown>;
-      if (hookCtx.channelId !== "whatsapp") return;
+      if (hookCtx.channelId !== "whatsapp-pro") return;
       const hookEvent = event as Record<string, unknown>;
       const metadata = (hookEvent.metadata ?? {}) as Record<string, unknown>;
 
@@ -80,7 +81,7 @@ export default definePluginEntry({
       (event, ctx) => {
         if (!ctx) return;
         const hookCtx = ctx as Record<string, unknown>;
-        if (hookCtx.channelId !== "whatsapp") return;
+        if (hookCtx.channelId !== "whatsapp-pro") return;
         const accountId = hookCtx.accountId as string | undefined;
         if (!accountId) return;
 

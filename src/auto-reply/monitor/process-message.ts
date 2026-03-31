@@ -79,7 +79,7 @@ async function resolveWhatsAppCommandAuthorized(params: {
   const storeAllowFrom = isGroup
     ? []
     : await readStoreAllowFromForDmPolicy({
-        provider: "whatsapp",
+        provider: "whatsapp-pro",
         accountId: params.msg.accountId,
         dmPolicy,
       });
@@ -258,11 +258,11 @@ export async function processMessage(params: {
         })()
       : undefined;
 
-  const textLimit = params.maxMediaTextChunkLimit ?? resolveTextChunkLimit(params.cfg, "whatsapp");
-  const chunkMode = resolveChunkMode(params.cfg, "whatsapp", params.route.accountId);
+  const textLimit = params.maxMediaTextChunkLimit ?? resolveTextChunkLimit(params.cfg, "whatsapp-pro");
+  const chunkMode = resolveChunkMode(params.cfg, "whatsapp-pro", params.route.accountId);
   const tableMode = resolveMarkdownTableMode({
     cfg: params.cfg,
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     accountId: params.route.accountId,
   });
   const mediaLocalRoots = getAgentScopedMediaLocalRoots(params.cfg, params.route.agentId);
@@ -275,7 +275,7 @@ export async function processMessage(params: {
   const { onModelSelected, ...replyPipeline } = createChannelReplyPipeline({
     cfg: params.cfg,
     agentId: params.route.agentId,
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     accountId: params.route.accountId,
   });
   const isSelfChat =
@@ -330,9 +330,9 @@ export async function processMessage(params: {
     CommandAuthorized: commandAuthorized,
     WasMentioned: params.msg.wasMentioned,
     ...(params.msg.location ? toLocationContext(params.msg.location) : {}),
-    Provider: "whatsapp",
-    Surface: "whatsapp",
-    OriginatingChannel: "whatsapp",
+    Provider: "whatsapp-pro",
+    Surface: "whatsapp-pro",
+    OriginatingChannel: "whatsapp-pro",
     OriginatingTo: params.msg.from,
   });
 
@@ -359,7 +359,7 @@ export async function processMessage(params: {
       backgroundTasks: params.backgroundTasks,
       storeAgentId: params.route.agentId,
       sessionKey: params.route.mainSessionKey,
-      channel: "whatsapp",
+      channel: "whatsapp-pro",
       to: dmRouteTarget,
       accountId: params.route.accountId,
       ctx: ctxPayload,

@@ -13,17 +13,18 @@ import {
 import type { ChannelSetupWizard } from "openclaw/plugin-sdk/setup";
 import { formatCliCommand, formatDocsLink } from "openclaw/plugin-sdk/setup-tools";
 import { listWhatsAppAccountIds, resolveWhatsAppAuthDir } from "./accounts.js";
+import { getChannelConfig, type WhatsAppProChannelConfig } from "./channel-config.js";
 import { loginWeb } from "./login.js";
 import { whatsappSetupAdapter } from "./setup-core.js";
 
-const channel = "whatsapp" as const;
+const channel = "whatsapp-pro" as const;
 
 function mergeWhatsAppConfig(
   cfg: OpenClawConfig,
-  patch: Partial<NonNullable<NonNullable<OpenClawConfig["channels"]>["whatsapp"]>>,
+  patch: Partial<WhatsAppProChannelConfig>,
   options?: { unsetOnUndefined?: string[] },
 ): OpenClawConfig {
-  const base = { ...(cfg.channels?.whatsapp ?? {}) } as Record<string, unknown>;
+  const base = { ...(getChannelConfig(cfg) ?? {}) } as Record<string, unknown>;
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) {
       if (options?.unsetOnUndefined?.includes(key)) {
@@ -37,7 +38,7 @@ function mergeWhatsAppConfig(
     ...cfg,
     channels: {
       ...cfg.channels,
-      whatsapp: base,
+      "whatsapp-pro": base,
     },
   };
 }
@@ -144,8 +145,9 @@ async function promptWhatsAppDmAccess(params: {
   forceAllowFrom: boolean;
   prompter: Parameters<NonNullable<ChannelSetupWizard["finalize"]>>[0]["prompter"];
 }): Promise<OpenClawConfig> {
-  const existingPolicy = params.cfg.channels?.whatsapp?.dmPolicy ?? "pairing";
-  const existingAllowFrom = params.cfg.channels?.whatsapp?.allowFrom ?? [];
+  const channelCfg = getChannelConfig(params.cfg);
+  const existingPolicy = channelCfg?.dmPolicy ?? "pairing";
+  const existingAllowFrom = channelCfg?.allowFrom ?? [];
   const existingLabel = existingAllowFrom.length > 0 ? existingAllowFrom.join(", ") : "unset";
 
   if (params.forceAllowFrom) {
@@ -160,7 +162,7 @@ async function promptWhatsAppDmAccess(params: {
 
   await params.prompter.note(
     [
-      "WhatsApp direct chats are gated by `channels.whatsapp.dmPolicy` + `channels.whatsapp.allowFrom`.",
+      "WhatsApp direct chats are gated by `channels.whatsapp-pro.dmPolicy` + `channels.whatsapp-pro.allowFrom`.",
       "- pairing (default): unknown senders get a pairing code; owner approves",
       "- allowlist: unknown senders are blocked",
       '- open: public inbound DMs (requires allowFrom to include "*")',

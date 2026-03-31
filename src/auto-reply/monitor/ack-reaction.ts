@@ -4,6 +4,7 @@ import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
 import { sendReactionWhatsApp } from "../../send.js";
 import { formatError } from "../../session.js";
 import type { WebInboundMsg } from "../types.js";
+import { getChannelConfig } from "../../channel-config.js";
 import { resolveGroupActivationFor } from "./group-activation.js";
 
 export function maybeSendAckReaction(params: {
@@ -21,7 +22,7 @@ export function maybeSendAckReaction(params: {
     return;
   }
 
-  const ackConfig = params.cfg.channels?.whatsapp?.ackReaction;
+  const ackConfig = getChannelConfig(params.cfg)?.ackReaction;
   const emoji = (ackConfig?.emoji ?? "").trim();
   const directEnabled = ackConfig?.direct ?? true;
   const groupMode = ackConfig?.group ?? "mentions";

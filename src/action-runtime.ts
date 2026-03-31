@@ -1,5 +1,6 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { resolveAuthorizedWhatsAppOutboundTarget } from "./action-runtime-target-auth.js";
+import { getChannelConfig } from "./channel-config.js";
 import {
   createActionGate,
   jsonResult,
@@ -19,7 +20,7 @@ export async function handleWhatsAppAction(
   cfg: OpenClawConfig,
 ): Promise<AgentToolResult<unknown>> {
   const action = readStringParam(params, "action", { required: true });
-  const isActionEnabled = createActionGate(cfg.channels?.whatsapp?.actions);
+  const isActionEnabled = createActionGate(getChannelConfig(cfg)?.actions);
 
   if (action === "react") {
     if (!isActionEnabled("reactions")) {

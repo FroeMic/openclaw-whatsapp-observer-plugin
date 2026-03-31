@@ -57,7 +57,7 @@ export function collectWhatsAppStatusIssues(
 
       if (!linked) {
         issues.push({
-          channel: "whatsapp",
+          channel: "whatsapp-pro",
           accountId,
           kind: "auth",
           message: "Not linked (no WhatsApp Web session).",
@@ -72,7 +72,7 @@ export function collectWhatsAppStatusIssues(
             ? ` (last inbound ${Math.max(0, Math.floor((Date.now() - lastInboundAt) / 60000))}m ago)`
             : "";
         issues.push({
-          channel: "whatsapp",
+          channel: "whatsapp-pro",
           accountId,
           kind: "runtime",
           message: `Linked but stale${staleSuffix}${lastError ? `: ${lastError}` : "."}`,
@@ -93,7 +93,7 @@ export function collectWhatsAppStatusIssues(
               ? "reconnecting"
               : "stopped";
         issues.push({
-          channel: "whatsapp",
+          channel: "whatsapp-pro",
           accountId,
           kind: "runtime",
           message: `Linked but ${stateLabel}${reconnectAttempts != null ? ` (reconnectAttempts=${reconnectAttempts})` : ""}${lastError ? `: ${lastError}` : "."}`,
@@ -104,7 +104,7 @@ export function collectWhatsAppStatusIssues(
 
       if (healthState === "logged-out") {
         issues.push({
-          channel: "whatsapp",
+          channel: "whatsapp-pro",
           accountId,
           kind: "auth",
           message: `Linked session logged out${lastError ? `: ${lastError}` : "."}`,
@@ -115,7 +115,7 @@ export function collectWhatsAppStatusIssues(
 
       if (running && !connected) {
         issues.push({
-          channel: "whatsapp",
+          channel: "whatsapp-pro",
           accountId,
           kind: "runtime",
           message: `Linked but disconnected${reconnectAttempts != null ? ` (reconnectAttempts=${reconnectAttempts})` : ""}${lastError ? `: ${lastError}` : "."}`,

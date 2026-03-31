@@ -54,7 +54,7 @@ export async function runWebHeartbeatOnce(opts: {
   const cfg = cfgOverride ?? loadConfig();
 
   // Resolve heartbeat visibility settings for WhatsApp
-  const visibility = resolveHeartbeatVisibility({ cfg, channel: "whatsapp" });
+  const visibility = resolveHeartbeatVisibility({ cfg, channel: "whatsapp-pro" });
   const heartbeatOkText = HEARTBEAT_TOKEN;
 
   const maybeSendHeartbeatOk = async (): Promise<boolean> => {
@@ -137,7 +137,7 @@ export async function runWebHeartbeatOnce(opts: {
         to,
         preview: overrideBody.slice(0, 160),
         hasMedia: false,
-        channel: "whatsapp",
+        channel: "whatsapp-pro",
         indicatorType: visibility.useIndicator ? resolveIndicatorType("sent") : undefined,
       });
       heartbeatLogger.info(
@@ -161,7 +161,7 @@ export async function runWebHeartbeatOnce(opts: {
         status: "skipped",
         to,
         reason: "alerts-disabled",
-        channel: "whatsapp",
+        channel: "whatsapp-pro",
       });
       return;
     }
@@ -195,7 +195,7 @@ export async function runWebHeartbeatOnce(opts: {
       emitHeartbeatEvent({
         status: "ok-empty",
         to,
-        channel: "whatsapp",
+        channel: "whatsapp-pro",
         silent: !okSent,
         indicatorType: visibility.useIndicator ? resolveIndicatorType("ok-empty") : undefined,
       });
@@ -238,7 +238,7 @@ export async function runWebHeartbeatOnce(opts: {
       emitHeartbeatEvent({
         status: "ok-token",
         to,
-        channel: "whatsapp",
+        channel: "whatsapp-pro",
         silent: !okSent,
         indicatorType: visibility.useIndicator ? resolveIndicatorType("ok-token") : undefined,
       });
@@ -262,7 +262,7 @@ export async function runWebHeartbeatOnce(opts: {
         to,
         reason: "alerts-disabled",
         preview: finalText.slice(0, 200),
-        channel: "whatsapp",
+        channel: "whatsapp-pro",
         hasMedia,
         indicatorType: visibility.useIndicator ? resolveIndicatorType("sent") : undefined,
       });
@@ -284,7 +284,7 @@ export async function runWebHeartbeatOnce(opts: {
       to,
       preview: finalText.slice(0, 160),
       hasMedia,
-      channel: "whatsapp",
+      channel: "whatsapp-pro",
       indicatorType: visibility.useIndicator ? resolveIndicatorType("sent") : undefined,
     });
     heartbeatLogger.info(
@@ -304,7 +304,7 @@ export async function runWebHeartbeatOnce(opts: {
       status: "failed",
       to,
       reason,
-      channel: "whatsapp",
+      channel: "whatsapp-pro",
       indicatorType: visibility.useIndicator ? resolveIndicatorType("failed") : undefined,
     });
     throw err;

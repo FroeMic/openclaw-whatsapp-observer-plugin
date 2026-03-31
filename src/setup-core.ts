@@ -4,8 +4,9 @@ import {
   migrateBaseNameToDefaultAccount,
   normalizeAccountId,
 } from "openclaw/plugin-sdk/setup";
+import { getChannelConfig } from "./channel-config.js";
 
-const channel = "whatsapp" as const;
+const channel = "whatsapp-pro" as const;
 
 export const whatsappSetupAdapter: ChannelSetupAdapter = {
   resolveAccountId: ({ accountId }) => normalizeAccountId(accountId),
@@ -30,8 +31,9 @@ export const whatsappSetupAdapter: ChannelSetupAdapter = {
       channelKey: channel,
       alwaysUseAccounts: true,
     });
+    const channelCfg = getChannelConfig(next);
     const entry = {
-      ...next.channels?.whatsapp?.accounts?.[accountId],
+      ...channelCfg?.accounts?.[accountId],
       ...(input.authDir ? { authDir: input.authDir } : {}),
       enabled: true,
     };
@@ -39,10 +41,10 @@ export const whatsappSetupAdapter: ChannelSetupAdapter = {
       ...next,
       channels: {
         ...next.channels,
-        whatsapp: {
-          ...next.channels?.whatsapp,
+        "whatsapp-pro": {
+          ...channelCfg,
           accounts: {
-            ...next.channels?.whatsapp?.accounts,
+            ...channelCfg?.accounts,
             [accountId]: entry,
           },
         },

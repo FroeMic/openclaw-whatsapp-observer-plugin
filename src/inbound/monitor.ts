@@ -406,7 +406,7 @@ export async function monitorWebInbox(options: {
     }
     for (const msg of upsert.messages ?? []) {
       recordChannelActivity({
-        channel: "whatsapp",
+        channel: "whatsapp-pro",
         accountId: options.accountId,
         direction: "inbound",
       });

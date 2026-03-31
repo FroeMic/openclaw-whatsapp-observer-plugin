@@ -13,6 +13,7 @@ import {
   resolveWhatsAppAccount,
   type ResolvedWhatsAppAccount,
 } from "./accounts.js";
+import { getChannelConfig } from "./channel-config.js";
 import {
   buildChannelConfigSchema,
   formatWhatsAppConfigAllowFromEntries,
@@ -25,7 +26,7 @@ import {
   type ChannelPlugin,
 } from "./runtime-api.js";
 
-export const WHATSAPP_CHANNEL = "whatsapp" as const;
+export const WHATSAPP_CHANNEL = "whatsapp-pro" as const;
 
 export async function loadWhatsAppChannelRuntime() {
   return await import("./channel.runtime.js");
@@ -77,8 +78,8 @@ export function createWhatsAppSetupWizardProxy(
       ...cfg,
       channels: {
         ...cfg.channels,
-        whatsapp: {
-          ...cfg.channels?.whatsapp,
+        "whatsapp-pro": {
+          ...getChannelConfig(cfg),
           enabled: false,
         },
       },
@@ -97,22 +98,22 @@ export function createWhatsAppPluginBase(params: {
 }) {
   const collectWhatsAppSecurityWarnings =
     createAllowlistProviderRouteAllowlistWarningCollector<ResolvedWhatsAppAccount>({
-      providerConfigPresent: (cfg) => cfg.channels?.whatsapp !== undefined,
+      providerConfigPresent: (cfg) => getChannelConfig(cfg) !== undefined,
       resolveGroupPolicy: (account) => account.groupPolicy,
       resolveRouteAllowlistConfigured: (account) =>
         Boolean(account.groups) && Object.keys(account.groups ?? {}).length > 0,
       restrictSenders: {
         surface: "WhatsApp groups",
         openScope: "any member in allowed groups",
-        groupPolicyPath: "channels.whatsapp.groupPolicy",
-        groupAllowFromPath: "channels.whatsapp.groupAllowFrom",
+        groupPolicyPath: "channels.whatsapp-pro.groupPolicy",
+        groupAllowFromPath: "channels.whatsapp-pro.groupAllowFrom",
       },
       noRouteAllowlist: {
         surface: "WhatsApp groups",
-        routeAllowlistPath: "channels.whatsapp.groups",
+        routeAllowlistPath: "channels.whatsapp-pro.groups",
         routeScope: "group",
-        groupPolicyPath: "channels.whatsapp.groupPolicy",
-        groupAllowFromPath: "channels.whatsapp.groupAllowFrom",
+        groupPolicyPath: "channels.whatsapp-pro.groupPolicy",
+        groupAllowFromPath: "channels.whatsapp-pro.groupAllowFrom",
       },
     });
   const base = createChannelPluginBase({
@@ -131,7 +132,7 @@ export function createWhatsAppPluginBase(params: {
       reactions: true,
       media: true,
     },
-    reload: { configPrefixes: ["web"], noopPrefixes: ["channels.whatsapp"] },
+    reload: { configPrefixes: ["web"], noopPrefixes: ["channels.whatsapp-pro"] },
     gatewayMethods: ["web.login.start", "web.login.wait"],
     configSchema: buildChannelConfigSchema(WhatsAppConfigSchema),
     config: {

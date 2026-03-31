@@ -13,10 +13,14 @@
     "@sinclair/typebox": "0.34.48"
   },
   "peerDependencies": {
-    "openclaw": ">=2026.3.22"
+    "openclaw": ">=2026.3.22",
+    "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
     "openclaw": {
+      "optional": true
+    },
+    "zod": {
       "optional": true
     }
   },

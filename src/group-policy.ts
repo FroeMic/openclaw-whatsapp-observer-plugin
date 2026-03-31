@@ -18,7 +18,7 @@ type WhatsAppGroupContext = {
 export function resolveWhatsAppGroupRequireMention(params: WhatsAppGroupContext): boolean {
   return resolveChannelGroupRequireMention({
     cfg: params.cfg,
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     groupId: params.groupId,
     accountId: params.accountId,
   });
@@ -29,7 +29,7 @@ export function resolveWhatsAppGroupToolPolicy(
 ): GroupToolPolicyConfig | undefined {
   return resolveChannelGroupToolsPolicy({
     cfg: params.cfg,
-    channel: "whatsapp",
+    channel: "whatsapp-pro",
     groupId: params.groupId,
     accountId: params.accountId,
     senderId: params.senderId,

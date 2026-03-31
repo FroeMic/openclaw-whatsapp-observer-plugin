@@ -11,6 +11,7 @@ import {
 } from "openclaw/plugin-sdk/account-resolution";
 import { resolveOAuthDir } from "openclaw/plugin-sdk/state-paths";
 import { hasWebCredsSync } from "./auth-store.js";
+import { getChannelConfig } from "./channel-config.js";
 import type { DmPolicy, GroupPolicy, WhatsAppAccountConfig } from "./runtime-api.js";
 
 export type ResolvedWhatsAppAccount = {
@@ -39,7 +40,7 @@ export type ResolvedWhatsAppAccount = {
 export const DEFAULT_WHATSAPP_MEDIA_MAX_MB = 50;
 
 const { listConfiguredAccountIds, listAccountIds, resolveDefaultAccountId } =
-  createAccountListHelpers("whatsapp");
+  createAccountListHelpers("whatsapp-pro");
 export const listWhatsAppAccountIds = listAccountIds;
 export const resolveDefaultWhatsAppAccountId = resolveDefaultAccountId;
 
@@ -76,7 +77,7 @@ function resolveAccountConfig(
   cfg: OpenClawConfig,
   accountId: string,
 ): WhatsAppAccountConfig | undefined {
-  return resolveAccountEntry(cfg.channels?.whatsapp?.accounts, accountId);
+  return resolveAccountEntry(getChannelConfig(cfg)?.accounts, accountId);
 }
 
 function resolveDefaultAuthDir(accountId: string): string {
@@ -122,7 +123,7 @@ export function resolveWhatsAppAccount(params: {
   cfg: OpenClawConfig;
   accountId?: string | null;
 }): ResolvedWhatsAppAccount {
-  const rootCfg = params.cfg.channels?.whatsapp;
+  const rootCfg = getChannelConfig(params.cfg);
   const accountId = params.accountId?.trim() || resolveDefaultWhatsAppAccountId(params.cfg);
   const merged = resolveMergedAccountConfig<WhatsAppAccountConfig>({
     channelConfig: rootCfg as WhatsAppAccountConfig | undefined,

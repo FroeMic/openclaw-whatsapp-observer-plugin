@@ -4,6 +4,7 @@ import {
   type EnvelopeFormatOptions,
 } from "openclaw/plugin-sdk/channel-inbound";
 import type { loadConfig } from "openclaw/plugin-sdk/config-runtime";
+import { getChannelConfig } from "../../channel-config.js";
 import type { WebInboundMsg } from "../types.js";
 
 export function formatReplyContext(msg: WebInboundMsg) {
@@ -25,8 +26,8 @@ export function buildInboundLine(params: {
   const { cfg, msg, agentId, previousTimestamp, envelope } = params;
   // WhatsApp inbound prefix: channels.whatsapp.messagePrefix > legacy messages.messagePrefix > identity/defaults
   const messagePrefix = resolveMessagePrefix(cfg, agentId, {
-    configured: cfg.channels?.whatsapp?.messagePrefix,
-    hasAllowFrom: (cfg.channels?.whatsapp?.allowFrom?.length ?? 0) > 0,
+    configured: getChannelConfig(cfg)?.messagePrefix,
+    hasAllowFrom: (getChannelConfig(cfg)?.allowFrom?.length ?? 0) > 0,
   });
   const prefixStr = messagePrefix ? `${messagePrefix} ` : "";
   const replyContext = formatReplyContext(msg);
