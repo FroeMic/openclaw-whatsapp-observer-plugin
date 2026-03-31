@@ -8,6 +8,13 @@ export const ObserverConfigSchema = z.object({
   accounts: z.array(z.string()).optional(),
   dbPath: z.string().optional(),
   mediaPath: z.string().optional(),
+  mode: z
+    .enum([
+      "record-all-retrieve-all",
+      "record-all-retrieve-filtered",
+      "record-filtered-retrieve-filtered",
+    ])
+    .optional(),
   filters: z
     .object({
       blocklist: z.array(z.string()).optional(),

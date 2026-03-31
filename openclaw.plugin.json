@@ -1,6 +1,7 @@
 {
   "id": "whatsapp-pro",
   "channels": ["whatsapp-pro"],
+  "skills": ["./skills"],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

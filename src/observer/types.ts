@@ -1,6 +1,20 @@
+export type ObserverMode =
+  | "record-all-retrieve-all"
+  | "record-all-retrieve-filtered"
+  | "record-filtered-retrieve-filtered";
+
+export const OBSERVER_MODES: readonly ObserverMode[] = [
+  "record-all-retrieve-all",
+  "record-all-retrieve-filtered",
+  "record-filtered-retrieve-filtered",
+] as const;
+
+export const DEFAULT_OBSERVER_MODE: ObserverMode = "record-all-retrieve-all";
+
 export type ObserverConfig = {
   dbPath: string;
   mediaPath: string;
+  mode: ObserverMode;
   filters: ObserverFilters;
   retentionDays: number;
   observerAccounts: string[];

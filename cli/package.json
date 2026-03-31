@@ -1,0 +1,25 @@
+{
+  "name": "wa-pro",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "CLI for querying WhatsApp Pro observer messages",
+  "bin": {
+    "wa-pro": "./bin/run.ts"
+  },
+  "oclif": {
+    "bin": "wa-pro",
+    "commands": {
+      "strategy": "pattern",
+      "target": "./src/commands"
+    },
+    "topicSeparator": " "
+  },
+  "dependencies": {
+    "@oclif/core": "^4.2.10",
+    "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

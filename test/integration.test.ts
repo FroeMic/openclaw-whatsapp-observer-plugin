@@ -1,7 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { parseObserverConfig, isObserverAccount } from "../src/observer-config.js";
 import { ObserverDB } from "../src/observer/db.js";
-import { registerObserverTools } from "../src/observer/tools.js";
 
 describe("Integration", () => {
   describe("parseObserverConfig", () => {
@@ -9,12 +8,14 @@ describe("Integration", () => {
       const config = parseObserverConfig(undefined);
       expect(config.dbPath).toBe("~/.openclaw/whatsapp-observer/messages.db");
       expect(config.retentionDays).toBe(90);
+      expect(config.mode).toBe("record-all-retrieve-all");
     });
 
     it("returns defaults when no observer key", () => {
       const config = parseObserverConfig({});
       expect(config.dbPath).toBe("~/.openclaw/whatsapp-observer/messages.db");
       expect(config.filters.allowlist).toEqual(["*"]);
+      expect(config.mode).toBe("record-all-retrieve-all");
     });
 
     it("parses minimal config with defaults", () => {
@@ -25,6 +26,7 @@ describe("Integration", () => {
       expect(config.dbPath).toBe("~/.openclaw/whatsapp-observer/messages.db");
       expect(config.mediaPath).toBe("~/.openclaw/whatsapp-observer/media");
       expect(config.retentionDays).toBe(90);
+      expect(config.mode).toBe("record-all-retrieve-all");
       expect(config.filters.blocklist).toEqual([]);
       expect(config.filters.allowlist).toEqual(["*"]);
     });
@@ -35,6 +37,7 @@ describe("Integration", () => {
           dbPath: "/custom/db.sqlite",
           mediaPath: "/custom/media",
           retentionDays: 30,
+          mode: "record-all-retrieve-filtered",
           filters: {
             blocklist: ["+4917600000001"],
             allowlist: ["+4917600000002", "group@g.us"],
@@ -45,31 +48,29 @@ describe("Integration", () => {
       expect(config.dbPath).toBe("/custom/db.sqlite");
       expect(config.mediaPath).toBe("/custom/media");
       expect(config.retentionDays).toBe(30);
+      expect(config.mode).toBe("record-all-retrieve-filtered");
       expect(config.filters.blocklist).toEqual(["+4917600000001"]);
       expect(config.filters.allowlist).toEqual(["+4917600000002", "group@g.us"]);
     });
-  });
 
-  describe("Plugin registration flow", () => {
-    it("registers tools when observer config is present", async () => {
-      const db = await ObserverDB.create(":memory:");
-      const tools: string[] = [];
-      const mockApi = {
-        registerTool(tool: Record<string, unknown>, opts?: { name: string }) {
-          tools.push(opts?.name ?? (tool.name as string));
-        },
-      };
+    it("parses all three observer modes", () => {
+      const modes = [
+        "record-all-retrieve-all",
+        "record-all-retrieve-filtered",
+        "record-filtered-retrieve-filtered",
+      ] as const;
 
-      registerObserverTools(mockApi, db);
+      for (const mode of modes) {
+        const config = parseObserverConfig({ observer: { mode } });
+        expect(config.mode).toBe(mode);
+      }
+    });
 
-      expect(tools).toEqual([
-        "wa_observer_search",
-        "wa_observer_recent",
-        "wa_observer_conversations",
-        "wa_observer_stats",
-      ]);
-
-      db.close();
+    it("defaults to record-all-retrieve-all for invalid mode", () => {
+      const config = parseObserverConfig({
+        observer: { mode: "invalid-mode" },
+      });
+      expect(config.mode).toBe("record-all-retrieve-all");
     });
   });
 

@@ -38,6 +38,10 @@ echo ""
 echo "Stopping gateway..."
 openclaw gateway stop 2>/dev/null || true
 
+# Remove wa-pro CLI symlink
+echo "Removing wa-pro CLI..."
+rm -f /usr/local/bin/wa-pro 2>/dev/null || true
+
 # Uninstall via openclaw CLI (removes plugins.entries, plugins.installs, plugins.allow, load paths)
 echo "Removing plugin registration..."
 if $KEEP_FILES; then

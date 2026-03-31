@@ -4,7 +4,6 @@ import { setWhatsAppRuntime } from "./src/runtime.js";
 import { getChannelConfig } from "./src/channel-config.js";
 import { parseObserverConfig, isObserverAccount } from "./src/observer-config.js";
 import { ObserverDB, preloadSqlJs } from "./src/observer/db.js";
-import { registerObserverTools } from "./src/observer/tools.js";
 
 export { whatsappPlugin } from "./src/channel.js";
 export { setWhatsAppRuntime } from "./src/runtime.js";
@@ -21,31 +20,20 @@ export default definePluginEntry({
     setWhatsAppRuntime(api.runtime);
     api.registerChannel({ plugin: whatsappPlugin });
 
-    // Observer setup — DB init + tool registration + hooks
+    // Observer setup — DB init + hooks (CLI provides query interface via wa-pro skill)
     const config = parseObserverConfig(getChannelConfig(api.config));
     const dbPath = api.resolvePath(config.dbPath);
     const mediaPath = api.resolvePath(config.mediaPath);
     const resolvedConfig = { ...config, dbPath, mediaPath };
 
-    // Start async DB creation — tools use a lazy getter
+    // Start async DB creation
     ObserverDB.create(dbPath).then((db) => {
       observerDb = db;
       setObserverState(db, resolvedConfig);
-      api.logger.info(`[whatsapp-pro] Observer DB ready`);
+      api.logger.info(`[whatsapp-pro] Observer DB ready (mode: ${config.mode})`);
     }).catch((err) => {
       api.logger.error(`[whatsapp-pro] Observer DB init failed: ${String(err)}`);
     });
-
-    // Register tools synchronously with lazy DB getter
-    try {
-      registerObserverTools(api, () => {
-        if (!observerDb) throw new Error("Observer DB not yet initialized");
-        return observerDb;
-      });
-      api.logger.info(`[whatsapp-pro] Tools registered`);
-    } catch (err) {
-      api.logger.error(`[whatsapp-pro] Tool registration failed: ${String(err)}`);
-    }
 
     // Log normal-path messages to the same DB
     api.on("message_received", (event, ctx) => {

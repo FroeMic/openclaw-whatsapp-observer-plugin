@@ -30,6 +30,25 @@ OPENCLAW_ROOT="$(dirname "$(readlink -f "$(which openclaw)")")"
 mkdir -p "$EXTENSION_DIR/node_modules"
 ln -sf "$OPENCLAW_ROOT" "$EXTENSION_DIR/node_modules/openclaw"
 
+# Install and link wa-pro CLI
+echo "Installing wa-pro CLI..."
+CLI_DIR="$PLUGIN_DIR/cli"
+cd "$CLI_DIR" && npm install --no-fund --no-audit
+ln -sf "$CLI_DIR/bin/run.ts" /usr/local/bin/wa-pro
+chmod +x "$CLI_DIR/bin/run.ts"
+
+# Ensure tsx is available (required for wa-pro shebang)
+if ! command -v tsx &>/dev/null; then
+  echo "Installing tsx (required for wa-pro CLI)..."
+  npm install -g tsx
+fi
+
+if command -v wa-pro &>/dev/null; then
+  echo "wa-pro CLI linked successfully."
+else
+  echo "WARNING: wa-pro not found on PATH after linking."
+fi
+
 echo ""
 echo "Installed. Next steps:"
 echo "  1) Run: bash $SCRIPT_DIR/setup.sh [accountId]"

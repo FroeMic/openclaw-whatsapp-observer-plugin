@@ -135,9 +135,11 @@ async function processObserverMessage(
   const sender = isGroup ? (msg.key?.participant ?? remoteJid) : remoteJid;
   const senderE164 = jidToE164(sender) ?? jidToE164(altJid);
 
-  // Apply blocklist/allowlist
-  if (isBlocked(senderE164 ?? sender, remoteJid, ctx.config.filters)) return;
-  if (!isAllowed(senderE164 ?? sender, remoteJid, ctx.config.filters)) return;
+  // Apply blocklist/allowlist at ingestion time only in record-filtered mode
+  if (ctx.config.mode === "record-filtered-retrieve-filtered") {
+    if (isBlocked(senderE164 ?? sender, remoteJid, ctx.config.filters)) return;
+    if (!isAllowed(senderE164 ?? sender, remoteJid, ctx.config.filters)) return;
+  }
 
   const timestamp = ((msg.messageTimestamp as number) ?? 0) * 1000 || Date.now();
   const rawMessage = msg.message as import("@whiskeysockets/baileys").proto.IMessage | undefined;
@@ -368,8 +370,10 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
             const reactorJid = reaction.key?.participant ?? reaction.key?.remoteJid ?? remoteJid;
             const reactorE164 = jidToE164(reactorJid);
 
-            if (isBlocked(reactorE164 ?? reactorJid, remoteJid, config.filters)) continue;
-            if (!isAllowed(reactorE164 ?? reactorJid, remoteJid, config.filters)) continue;
+            if (config.mode === "record-filtered-retrieve-filtered") {
+              if (isBlocked(reactorE164 ?? reactorJid, remoteJid, config.filters)) continue;
+              if (!isAllowed(reactorE164 ?? reactorJid, remoteJid, config.filters)) continue;
+            }
 
             db.insertMessage({
               messageId: reaction.key?.id ?? undefined,
