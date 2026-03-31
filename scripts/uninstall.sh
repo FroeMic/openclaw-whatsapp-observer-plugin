@@ -7,23 +7,27 @@ CONFIG_PATH="${HOME}/.openclaw/openclaw.json"
 
 # --- Parse flags ---
 KEEP_FILES=false
+PURGE_CREDS=false
 MIGRATE=""  # empty = prompt, "yes" = --migrate, "no" = --no-migrate
 for arg in "$@"; do
   case "$arg" in
-    --migrate)    MIGRATE="yes" ;;
-    --no-migrate) MIGRATE="no" ;;
-    --keep-files) KEEP_FILES=true ;;
+    --migrate)           MIGRATE="yes" ;;
+    --no-migrate)        MIGRATE="no" ;;
+    --keep-files)        KEEP_FILES=true ;;
+    --purge-credentials) PURGE_CREDS=true ;;
     --help|-h)
       echo "Usage: uninstall.sh [OPTIONS]"
       echo ""
       echo "Remove the WhatsApp Pro plugin from an existing openclaw installation."
       echo ""
       echo "Options:"
-      echo "  --migrate      Migrate channels.whatsapp-pro config back to channels.whatsapp"
-      echo "                 (observer-only accounts are excluded)"
-      echo "  --no-migrate   Remove channels.whatsapp-pro without migrating back"
-      echo "  --keep-files   Keep plugin files on disk (~/.openclaw/extensions/whatsapp-pro)"
-      echo "  -h, --help     Show this help"
+      echo "  --migrate             Migrate channels.whatsapp-pro config back to channels.whatsapp"
+      echo "                        (observer-only accounts are excluded)"
+      echo "  --no-migrate          Remove channels.whatsapp-pro without migrating back"
+      echo "  --keep-files          Keep plugin files on disk (~/.openclaw/extensions/whatsapp-pro)"
+      echo "  --purge-credentials   Delete WhatsApp Web credentials (~/.openclaw/oauth/whatsapp/)"
+      echo "                        Your phone will need to be re-linked after reinstall"
+      echo "  -h, --help            Show this help"
       echo ""
       echo "If neither --migrate nor --no-migrate is given, you will be prompted."
       exit 0
@@ -190,6 +194,18 @@ fi
 if ! $KEEP_FILES && [ -d "$EXTENSION_DIR" ]; then
   echo "Removing plugin files..."
   rm -rf "$EXTENSION_DIR"
+fi
+
+# --- Purge credentials if requested ---
+WA_CREDS_DIR="${HOME}/.openclaw/oauth/whatsapp"
+if $PURGE_CREDS; then
+  if [ -d "$WA_CREDS_DIR" ]; then
+    echo "Purging WhatsApp Web credentials ($WA_CREDS_DIR)..."
+    rm -rf "$WA_CREDS_DIR"
+    echo "  Credentials removed. You will need to re-link your phone after reinstall."
+  else
+    echo "No credentials found at $WA_CREDS_DIR, skipping."
+  fi
 fi
 
 # --- Re-enable built-in whatsapp plugin ---
