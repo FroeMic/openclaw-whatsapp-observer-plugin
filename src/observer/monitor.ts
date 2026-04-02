@@ -120,6 +120,15 @@ export async function processObserverMessage(
   // Resolve JID: prefer remoteJidAlt (E.164-based) when remoteJid uses LID format
   const rawJid = msg.key?.remoteJid;
   const altJid = (msg.key as Record<string, unknown>)?.remoteJidAlt as string | undefined;
+  const participantAlt = (msg.key as Record<string, unknown>)?.participantAlt as string | undefined;
+
+  // Log JID resolution for debugging
+  if (rawJid?.endsWith("@lid")) {
+    ctx.logger?.info(
+      `Observer ${ctx.accountId}: LID detected rawJid=${rawJid} altJid=${altJid ?? "none"} participantAlt=${participantAlt ?? "none"} keys=${Object.keys(msg.key ?? {}).join(",")}`,
+    );
+  }
+
   const remoteJid = altJid && (altJid.endsWith("@s.whatsapp.net") || altJid.endsWith("@g.us"))
     ? altJid
     : rawJid;
