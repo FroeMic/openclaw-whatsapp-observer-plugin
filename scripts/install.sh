@@ -167,9 +167,8 @@ node -e "
     const before = cfg.plugins.allow.length;
     cfg.plugins.allow = cfg.plugins.allow.filter(id => id !== 'whatsapp-pro');
     if (cfg.plugins.allow.length < before) changed = true;
-    if (cfg.plugins.allow.length === 0) delete cfg.plugins.allow;
+    // Don't delete plugins.allow when empty — openclaw needs it to exist
   }
-  if (cfg.plugins && Object.keys(cfg.plugins).length === 0) delete cfg.plugins;
   if (changed) {
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
     console.log('  Cleaned up stale whatsapp-pro config from previous install.');
