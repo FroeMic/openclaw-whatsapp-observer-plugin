@@ -37,7 +37,8 @@ export default class Conversations extends Command {
 
       printOutput(conversations, flags.format as OutputFormat, [
         { key: "conversationId", header: "Conversation", width: 35 },
-        { key: "groupName", header: "Group", width: 25 },
+        { key: "groupName", header: "Group", width: 20 },
+        { key: "contactName", header: "Contact", width: 20 },
         { key: "messageCount", header: "Messages", width: 10 },
         { key: "lastMessageAt", header: "Last Message", width: 24 },
         { key: "lastSender", header: "Last Sender", width: 20 },

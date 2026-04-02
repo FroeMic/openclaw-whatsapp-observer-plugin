@@ -281,6 +281,10 @@ export class ObserverDB {
       SELECT
         conversation_id AS conversationId,
         MAX(group_name) AS groupName,
+        (SELECT m3.sender_name FROM messages m3
+         WHERE m3.conversation_id = messages.conversation_id
+           AND m3.sender_name IS NOT NULL AND m3.sender_name != ''
+         ORDER BY m3.timestamp DESC LIMIT 1) AS contactName,
         COUNT(*) AS messageCount,
         MAX(timestamp) AS lastMessageAt,
         (SELECT sender FROM messages m2

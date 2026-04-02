@@ -59,6 +59,7 @@ export type ObserverStats = {
 export type ConversationSummary = {
   conversationId: string;
   groupName?: string;
+  contactName?: string;
   messageCount: number;
   lastMessageAt: number;
   lastSender?: string;
