@@ -426,6 +426,18 @@ export class ObserverDB {
     );
   }
 
+  /** Get pending backfill requests for an account. */
+  getPendingBackfills(accountId: string): Array<{ key: string; value: Record<string, unknown> }> {
+    const rows = this.query(
+      "SELECT key, value FROM settings WHERE key LIKE :prefix",
+      { ":prefix": `backfill.pending.${accountId}.%` },
+    );
+    return rows.map((row) => ({
+      key: row.key as string,
+      value: JSON.parse(row.value as string) as Record<string, unknown>,
+    }));
+  }
+
   /** Get the oldest message for a conversation (used as anchor for backfill). */
   getOldestMessage(conversationId: string, accountId?: string): Record<string, unknown> | undefined {
     const conditions = ["conversation_id = :conversationId"];

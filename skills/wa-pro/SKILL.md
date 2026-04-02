@@ -55,6 +55,14 @@ wa-pro recent [--conversation <jid>] [--sender <name>] [--account <id>] [--limit
 wa-pro conversations [--account <id>] [--limit <N>]
 ```
 
+### Backfill history
+
+```bash
+wa-pro backfill <conversation-jid> --account <id> [--count <N>] [--requests <N>] [--wait <seconds>]
+```
+
+Request older messages for a conversation from WhatsApp. Requires the gateway running and the phone online. Use `wa-pro conversations` to find JIDs. Default: 50 messages per request, max 50.
+
 ### List known contacts
 
 ```bash

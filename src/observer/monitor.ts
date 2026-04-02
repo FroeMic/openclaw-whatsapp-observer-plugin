@@ -13,6 +13,62 @@ import { hasMedia, detectMediaType, downloadAndStoreMedia } from "./media.js";
 import type { ObserverDB } from "./db.js";
 import type { ObserverConfig, ChannelLogSink, MessageSource } from "./types.js";
 
+// Active observer sockets keyed by accountId — used for on-demand backfill
+const activeSockets = new Map<string, ReturnType<typeof makeWASocket>>();
+
+/** Get the active Baileys socket for an observer account (if connected). */
+export function getObserverSocket(accountId: string): ReturnType<typeof makeWASocket> | undefined {
+  return activeSockets.get(accountId);
+}
+
+/**
+ * Request on-demand history backfill for a chat.
+ * Uses Baileys' fetchMessageHistory() which requests older messages from the phone.
+ * Results arrive via the messaging-history.set event and are automatically processed.
+ *
+ * @returns Number of messages requested, or null if account not connected.
+ */
+export async function requestBackfill(params: {
+  accountId: string;
+  conversationId: string;
+  count?: number;
+  db: ObserverDB;
+  logger?: ChannelLogSink;
+}): Promise<number | null> {
+  const sock = activeSockets.get(params.accountId);
+  if (!sock) {
+    params.logger?.warn(`Backfill: account ${params.accountId} not connected`);
+    return null;
+  }
+
+  const count = Math.min(params.count ?? 50, 50); // Baileys max is 50 per request
+  const oldest = params.db.getOldestMessage(params.conversationId, params.accountId);
+
+  if (!oldest) {
+    params.logger?.info(`Backfill: no messages in ${params.conversationId}, cannot anchor`);
+    return null;
+  }
+
+  const msgKey = {
+    remoteJid: params.conversationId,
+    id: oldest.message_id as string,
+    fromMe: false,
+  };
+  const timestamp = (oldest.timestamp as number) / 1000; // Baileys uses seconds
+
+  params.logger?.info(
+    `Backfill: requesting ${count} messages before ${new Date(oldest.timestamp as number).toISOString()} in ${params.conversationId}`,
+  );
+
+  try {
+    await sock.fetchMessageHistory(count, msgKey, Math.floor(timestamp));
+    return count;
+  } catch (err) {
+    params.logger?.error(`Backfill failed: ${String(err)}`);
+    return null;
+  }
+}
+
 export type ObserverMonitorParams = {
   accountId: string;
   authDir: string;
@@ -377,6 +433,7 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
 
       await waitForConnection(sock);
       reconnectAttempts = 0;
+      activeSockets.set(accountId, sock);
       params.setStatus({ running: true, connected: true, lastConnectedAt: Date.now() });
       logger?.info(`Observer ${accountId}: connected`);
 
@@ -558,8 +615,43 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
         }
       });
 
+      // Poll for backfill requests from the CLI
+      const backfillPollInterval = setInterval(async () => {
+        try {
+          const pending = db.getPendingBackfills(accountId);
+          for (const { key, value: request } of pending) {
+            try {
+              const conversationId = request.conversationId as string;
+              const anchorMessageId = request.anchorMessageId as string;
+              const anchorTimestamp = request.anchorTimestamp as number;
+              const backfillCount = (request.count as number) ?? 50;
+              logger?.info(`Observer ${accountId}: processing backfill for ${conversationId}`);
+              const msgKey = {
+                remoteJid: conversationId,
+                id: anchorMessageId,
+                fromMe: false,
+              };
+              await sock.fetchMessageHistory(
+                backfillCount,
+                msgKey,
+                Math.floor(anchorTimestamp / 1000),
+              );
+              logger?.info(`Observer ${accountId}: backfill request sent for ${conversationId}`);
+            } catch (err) {
+              logger?.error(`Observer ${accountId}: backfill error: ${String(err)}`);
+            }
+            // Remove processed request
+            db.deleteSetting(key);
+          }
+        } catch {
+          // polling error — ignore
+        }
+      }, 5_000);
+
       // Wait for close/abort
       await waitForCloseOrAbort(sock, abortSignal);
+      clearInterval(backfillPollInterval);
+      activeSockets.delete(accountId);
       logger?.info(`Observer ${accountId}: disconnected`);
       params.setStatus({ connected: false });
     } catch (err) {

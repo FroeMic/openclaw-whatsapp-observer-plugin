@@ -4,6 +4,7 @@ import { setWhatsAppRuntime } from "./src/runtime.js";
 import { getChannelConfig } from "./src/channel-config.js";
 import { parseObserverConfig, isObserverAccount } from "./src/observer-config.js";
 import { ObserverDB, preloadSqlJs } from "./src/observer/db.js";
+import { requestBackfill } from "./src/observer/monitor.js";
 
 export { whatsappPlugin } from "./src/channel.js";
 export { setWhatsAppRuntime } from "./src/runtime.js";
@@ -72,6 +73,33 @@ export default definePluginEntry({
       },
       { priority: 9999 },
     );
+
+    // Register gateway method for on-demand backfill (callable via wa-pro CLI)
+    api.registerGatewayMethod("wa-pro.backfill", async (params) => {
+      const { accountId, conversationId, count } = params as {
+        accountId?: string;
+        conversationId?: string;
+        count?: number;
+      };
+      if (!accountId || !conversationId) {
+        return { error: "accountId and conversationId are required" };
+      }
+      if (!observerDb) {
+        return { error: "Observer DB not initialized" };
+      }
+      const result = await requestBackfill({
+        accountId,
+        conversationId,
+        count,
+        db: observerDb,
+        logger: {
+          info: (msg) => api.logger.info(msg),
+          warn: (msg) => api.logger.warn(msg),
+          error: (msg) => api.logger.error(msg),
+        },
+      });
+      return { requested: result };
+    });
 
     api.logger.info(
       `[whatsapp-pro] Observer mode initialized (db: ${dbPath}, media: ${mediaPath})`,
