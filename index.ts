@@ -94,6 +94,31 @@ export default definePluginEntry({
       { priority: 9999 },
     );
 
+    // Log outbound messages (agent replies, manual sends) to the same DB
+    api.on("message_sent", (event, ctx) => {
+      if (!ctx || !observerDb) return;
+      const hookCtx = ctx as Record<string, unknown>;
+      if (hookCtx.channelId !== "whatsapp-pro") return;
+      const hookEvent = event as Record<string, unknown>;
+
+      try {
+        observerDb.insertMessage({
+          messageId: (hookEvent.messageId as string) ?? undefined,
+          accountId: (hookCtx.accountId as string) ?? "unknown",
+          sender: (hookEvent.to as string) ?? "self",
+          senderName: "self",
+          conversationId: (hookCtx.conversationId as string) ?? (hookEvent.to as string),
+          isGroup: Boolean(hookEvent.isGroup),
+          content: hookEvent.content as string,
+          timestamp: (hookEvent.timestamp as number) ?? Date.now(),
+          messageType: "message",
+          source: "pipeline",
+        });
+      } catch (err) {
+        api.logger.error(`[whatsapp-pro] Failed to log outbound message: ${String(err)}`);
+      }
+    });
+
     api.logger.info(
       `[whatsapp-pro] Observer mode initialized (db: ${dbPath}, media: ${mediaPath})`,
     );

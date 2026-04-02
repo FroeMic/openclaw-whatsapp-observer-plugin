@@ -42,7 +42,7 @@ export async function monitorWebInbox(options: {
   shouldDebounce?: (msg: WebInboundMessage) => boolean;
 }) {
   const inboundLogger = getChildLogger({ module: "web-inbound" });
-  const inboundConsoleLog = createSubsystemLogger("gateway/channels/whatsapp").child("inbound");
+  const inboundConsoleLog = createSubsystemLogger("gateway/channels/whatsapp-pro").child("inbound");
   const sock = await createWaSocket(false, options.verbose, {
     authDir: options.authDir,
   });

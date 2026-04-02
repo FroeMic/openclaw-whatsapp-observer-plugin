@@ -12,7 +12,7 @@ import { resolveWhatsAppAccount, resolveWhatsAppMediaMaxBytes } from "./accounts
 import { type ActiveWebSendOptions, requireActiveWebListener } from "./active-listener.js";
 import { loadWebMedia } from "./media.js";
 
-const outboundLog = createSubsystemLogger("gateway/channels/whatsapp").child("outbound");
+const outboundLog = createSubsystemLogger("gateway/channels/whatsapp-pro").child("outbound");
 
 export async function sendMessageWhatsApp(
   to: string,
