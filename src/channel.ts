@@ -82,9 +82,9 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
       ...createWhatsAppOutboundBase({
         chunker: (text, limit) => getWhatsAppRuntime().channel.text.chunkText(text, limit),
         sendMessageWhatsApp: async (...args) =>
-          await getWhatsAppRuntime().channel.whatsapp.sendMessageWhatsApp(...args),
+          await getWhatsAppRuntime().channel["whatsapp-pro"].sendMessageWhatsApp(...args),
         sendPollWhatsApp: async (...args) =>
-          await getWhatsAppRuntime().channel.whatsapp.sendPollWhatsApp(...args),
+          await getWhatsAppRuntime().channel["whatsapp-pro"].sendPollWhatsApp(...args),
         shouldLogVerbose: () => getWhatsAppRuntime().logging.shouldLogVerbose(),
         resolveTarget: ({ to, allowFrom, mode }) =>
           resolveWhatsAppOutboundTarget({ to, allowFrom, mode }),
@@ -104,9 +104,9 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
         setupWizard: whatsappSetupWizardProxy,
         setup: whatsappSetupAdapter,
         isConfigured: async (account) =>
-          await getWhatsAppRuntime().channel.whatsapp.webAuthExists(account.authDir),
+          await getWhatsAppRuntime().channel["whatsapp-pro"].webAuthExists(account.authDir),
       }),
-      agentTools: () => [getWhatsAppRuntime().channel.whatsapp.createLoginTool()],
+      agentTools: () => [getWhatsAppRuntime().channel["whatsapp-pro"].createLoginTool()],
       allowlist: buildDmGroupAccountAllowlistAdapter({
         channelId: WHATSAPP_CHANNEL,
         resolveAccount: resolveWhatsAppAccount,
@@ -177,7 +177,7 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
           });
           const emoji = readStringParam(params, "emoji", { allowEmpty: true });
           const remove = typeof params.remove === "boolean" ? params.remove : undefined;
-          return await getWhatsAppRuntime().channel.whatsapp.handleWhatsAppAction(
+          return await getWhatsAppRuntime().channel["whatsapp-pro"].handleWhatsAppAction(
             {
               action: "react",
               chatJid:
