@@ -1,43 +1,209 @@
-# @openclaw/whatsapp-pro
+# WhatsApp Pro — OpenClaw Plugin
 
-A forked WhatsApp channel plugin for OpenClaw that adds passive observer-account support alongside the standard WhatsApp integration.
+An independent WhatsApp channel plugin for [OpenClaw](https://openclaw.ai) with passive message observation, a standalone CLI for querying message history, and configurable recording/retrieval modes.
 
-## Overview
+## Features
 
-This plugin is a full superset of the built-in OpenClaw WhatsApp plugin. Normal and business accounts work identically to upstream -- same runtime methods, same session handling, same agent pipeline. The fork adds two capabilities:
+- **Independent channel** — registers as `whatsapp-pro`, can coexist with the built-in WhatsApp plugin
+- **Observer mode** — passively log all WhatsApp messages to a local SQLite database without triggering agent sessions
+- **Normal mode** — full agent pipeline with DM policy, group policy, and access control (same as built-in)
+- **`wa-pro` CLI** — query message history, manage observer settings, inspect accounts
+- **Agent skill** — teaches the OpenClaw agent about `wa-pro` so it can query message history on demand
+- **Three recording modes** — control what gets stored and what the agent can see
 
-1. **Observer mode** -- designate accounts as passive listeners. Observer accounts connect to WhatsApp via Baileys, log every incoming message (including reactions, polls, edits, and deletions) to a local SQLite database, optionally capture media files, and expose query tools for agents -- all without creating sessions, triggering the agent pipeline, or ever sending a message.
+## Install
 
-2. **Pipeline logging** -- all messages received on normal (non-observer) accounts are also logged to the same SQLite database via the `message_received` hook. This means agent tools can search across all accounts in one place.
+```bash
+git clone https://github.com/FroeMic/openclaw-whatsapp-observer-plugin.git
+cd openclaw-whatsapp-observer-plugin
+bash scripts/install.sh
+```
 
-## How It Differs from the Original WhatsApp Plugin
+The install script will:
+1. Back up your `openclaw.json`
+2. Optionally migrate existing `channels.whatsapp` config to `whatsapp-pro`
+3. Install the plugin and link the `wa-pro` CLI
+4. Install `tsx` if needed (required for the CLI)
 
-| Capability | Upstream plugin | This fork |
-|---|---|---|
-| Normal / business accounts | Full support | Identical behaviour (same code paths) |
-| Normal-account message logging | Not available | All inbound messages logged to SQLite via hook |
-| Observer account mode | Not available | Connect, log, query -- zero send capability |
-| Reactions, polls, edits, deletions | Not logged | Logged with message type and reference to original |
-| SQLite message store | Not available | Shared DB across all accounts |
-| Media capture to disk | Not available | Optional, configurable path |
-| Agent query tools | Not available | 4 read-only tools for searching and summarising |
+### Install flags
 
-The diff against upstream is intentionally small (~40 lines across `channel.ts` and `index.ts`). All observer logic lives in `src/observer/`, keeping merge conflicts minimal when syncing with upstream changes.
+| Flag | Description |
+|------|-------------|
+| `--migrate` | Migrate existing `channels.whatsapp` config to `whatsapp-pro` |
+| `--no-migrate` | Start fresh, disable built-in whatsapp without copying config |
+
+If neither flag is given and `channels.whatsapp` config exists, you will be prompted.
+
+## Setup
+
+```bash
+bash scripts/setup.sh <accountId>
+```
+
+You'll be prompted to choose between **normal** (full agent pipeline) and **observer** (passive logging only) mode for the account. Then scan the QR code to link your phone.
+
+```bash
+openclaw gateway restart
+```
+
+## Uninstall
+
+```bash
+bash scripts/uninstall.sh
+```
+
+### Uninstall flags
+
+| Flag | Description |
+|------|-------------|
+| `--migrate` | Migrate config back to `channels.whatsapp` (observer-only accounts are excluded) |
+| `--no-migrate` | Remove `channels.whatsapp-pro` config without migrating back |
+| `--restore-whatsapp` | Re-enable built-in whatsapp plugin |
+| `--no-restore-whatsapp` | Don't re-enable built-in whatsapp |
+| `--purge-credentials` | Delete WhatsApp Web session credentials (`~/.openclaw/oauth/whatsapp/`) |
+| `--keep-files` | Keep plugin files on disk |
+
+If `--restore-whatsapp` / `--no-restore-whatsapp` is not given, the script auto-detects whether whatsapp was enabled before install.
+
+## CLI Reference
+
+### Query Commands
+
+```bash
+# Full-text search
+wa-pro search "<query>" [--sender <name>] [--group <name>] [--after <date>] [--before <date>] [--limit <N>]
+
+# Chronological conversation history
+wa-pro history <conversation-jid> [--account <id>] [--after <date>] [--before <date>] [--limit <N>]
+
+# Recent messages (newest first)
+wa-pro recent [--conversation <jid>] [--sender <name>] [--account <id>] [--limit <N>]
+
+# List conversations with message counts
+wa-pro conversations [--account <id>] [--limit <N>]
+
+# Message statistics
+wa-pro stats [--account <id>] [--after <date>] [--group-by sender|group|day|hour]
+```
+
+All query commands output JSON by default. Use `--format table` for human-readable output. All outputs include `account_id` to distinguish messages from different WhatsApp accounts.
+
+### Account & Config Commands
+
+```bash
+# List accounts with status, policies, and message counts
+wa-pro accounts [--format table]
+
+# View observer settings (from DB)
+wa-pro config show
+
+# Change recording/retrieval mode
+wa-pro config mode record-all-retrieve-all
+wa-pro config mode record-all-retrieve-filtered
+wa-pro config mode record-filtered-retrieve-filtered
+
+# Manage allowlist
+wa-pro config allowlist list
+wa-pro config allowlist add +4917600000001
+wa-pro config allowlist add 120363406173840067@g.us
+wa-pro config allowlist remove +4917600000001
+wa-pro config allowlist clear
+
+# Manage blocklist
+wa-pro config blocklist list
+wa-pro config blocklist add +4917600000001
+wa-pro config blocklist remove +4917600000001
+wa-pro config blocklist clear
+
+# Set message retention
+wa-pro config retention 90    # 90 days
+wa-pro config retention 0     # Keep forever
+```
+
+Config changes take effect immediately — they're stored in the observer database, not `openclaw.json`.
+
+## Observer Modes
+
+| Mode | Recording | Retrieval |
+|------|-----------|-----------|
+| `record-all-retrieve-all` (default) | All messages | All messages |
+| `record-all-retrieve-filtered` | All messages | Filtered by allowlist/blocklist |
+| `record-filtered-retrieve-filtered` | Only allowed | Only allowed (naturally) |
+
+These modes are **independent** from the WhatsApp channel's `dmPolicy` / `allowFrom` settings, which control which messages trigger agent sessions.
+
+## Configuration
+
+### openclaw.json
+
+Account configuration lives in `channels.whatsapp-pro` — same shape as the native WhatsApp plugin:
+
+```json
+{
+  "channels": {
+    "whatsapp-pro": {
+      "accounts": {
+        "personal": {
+          "enabled": true,
+          "dmPolicy": "pairing",
+          "groupPolicy": "allowlist"
+        },
+        "michael": {
+          "enabled": true
+        }
+      },
+      "observer": {
+        "accounts": ["michael"]
+      }
+    }
+  }
+}
+```
+
+### Observer Database
+
+Observer settings (mode, filters, retention) are stored in the SQLite database at `~/.openclaw/whatsapp-observer/messages.db`. Manage them with `wa-pro config` commands. On first plugin startup, settings are seeded from `openclaw.json` (one-time migration); after that, the DB is the source of truth.
 
 ## Architecture
+
+```
+openclaw-whatsapp-observer-plugin/
+  index.ts                    # Plugin entry point
+  openclaw.plugin.json        # Plugin manifest (channels, skills)
+  src/
+    channel.ts                # Channel plugin (adapters, gateway, etc.)
+    channel-config.ts         # Zod schema + typed config accessor
+    observer-config.ts        # Observer config parsing
+    observer/
+      monitor.ts              # Passive Baileys listener for observer accounts
+      db.ts                   # SQLite database (messages + settings tables)
+      filter.ts               # Allowlist/blocklist filtering
+      types.ts                # Type definitions
+  cli/
+    bin/run.ts                # CLI entry point (#!/usr/bin/env tsx)
+    src/
+      commands/               # oclif commands (search, recent, history, etc.)
+      lib/                    # Shared CLI utilities (db-reader, config-reader, etc.)
+  skills/
+    wa-pro/SKILL.md           # Agent skill (teaches the agent about wa-pro CLI)
+  scripts/
+    install.sh                # Install plugin + CLI with config migration
+    uninstall.sh              # Remove plugin + CLI with config restoration
+    setup.sh                  # Setup an account (normal or observer)
+  test/                       # Vitest tests
+```
 
 ### Three-Layer Safety Model
 
 Observer accounts are prevented from sending messages at three independent layers:
 
-1. **No send methods.** The observer Baileys socket is never wired to any outbound-message function. The code literally does not call `sendMessage`.
-2. **No auto-reply pipeline.** Incoming messages on observer accounts skip session creation and agent dispatch entirely. They are routed straight to the SQLite writer.
-3. **`message_sending` hook.** As a final guardrail, a lifecycle hook intercepts any outbound message attempt and drops it if the originating account is flagged as an observer.
+1. **No send methods.** The observer Baileys socket is never wired to any outbound-message function.
+2. **No auto-reply pipeline.** Incoming messages on observer accounts skip session creation and agent dispatch entirely.
+3. **`message_sending` hook.** A lifecycle hook intercepts any outbound message attempt and drops it if the originating account is flagged as an observer.
 
-### Message Flow Comparison
+### Message Flow
 
 **Normal account:**
-
 ```
 WhatsApp --> Baileys --> channel.onMessage --> OpenClaw session --> Agent --> reply
                                                   |
@@ -45,94 +211,11 @@ WhatsApp --> Baileys --> channel.onMessage --> OpenClaw session --> Agent --> re
 ```
 
 **Observer account:**
-
 ```
 WhatsApp --> Baileys --> observer.onMessage --> SQLite write (+ optional media save) --> done
 ```
 
-Normal accounts log to the DB via a hook (no impact on session/agent flow). Observer accounts bypass the pipeline entirely -- no session is created, no agent is invoked, no reply is sent.
-
-## Getting Started
-
-### Prerequisites
-
-- OpenClaw installed and working
-- Node 22 or later
-- SQLite 3 CLI (optional, for manual verification)
-
-### Step 1 -- Disable the built-in WhatsApp plugin
-
-```bash
-openclaw plugins disable whatsapp
-```
-
-### Step 2 -- Install this fork
-
-```bash
-openclaw plugins install ~/path-to-this-repo
-```
-
-Replace `~/path-to-this-repo` with the actual path to your local clone of this repository.
-
-### Step 3 -- Configure in config.yaml
-
-Add your accounts and plugin settings. Below is a full example showing a normal account (`main`) alongside an observer account (`personal`):
-
-```yaml
-channels:
-  whatsapp:
-    accounts:
-      main:
-        enabled: true
-        dmPolicy: pairing
-        allowFrom: ["+4917..."]
-      personal:
-        enabled: true
-        observerMode: true
-        # No dmPolicy needed -- observer bypasses access control entirely
-
-plugins:
-  entries:
-    whatsapp-pro:
-      enabled: true
-      config:
-        observer:
-          dbPath: "~/.openclaw/whatsapp-observer/messages.db"
-          mediaPath: "~/.openclaw/whatsapp-observer/media"
-          filters:
-            blocklist: []
-            allowlist: ["*"]
-          retentionDays: 90
-```
-
-### Step 4 -- Login the observer account
-
-```bash
-openclaw channels login --account personal
-```
-
-Scan the QR code with the WhatsApp app on the phone linked to the observer account.
-
-### Step 5 -- Start the gateway
-
-```bash
-openclaw gateway run
-```
-
-The observer account will connect, begin receiving messages, and write them to the configured SQLite database.
-
-### Step 6 -- Verify
-
-```bash
-sqlite3 ~/.openclaw/whatsapp-observer/messages.db \
-  "SELECT source, message_type, sender_name, content, datetime(timestamp/1000, 'unixepoch') FROM messages ORDER BY timestamp DESC LIMIT 10;"
-```
-
-You should see rows from both `observer` and `pipeline` sources as messages arrive.
-
 ## Message Types
-
-Every logged message has a `message_type` and `source` field:
 
 | `message_type` | Description | `ref_message_id` |
 |---|---|---|
@@ -147,46 +230,19 @@ Every logged message has a `message_type` and `source` field:
 | `observer` | Captured by the observer Baileys listener |
 | `pipeline` | Captured from a normal account via `message_received` hook |
 
-## Observer Config Reference
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `dbPath` | string | `~/.openclaw/whatsapp-observer/messages.db` | Path to the SQLite database file. Created automatically if it does not exist. |
-| `mediaPath` | string | `~/.openclaw/whatsapp-observer/media` | Directory for downloaded media files. |
-| `filters.blocklist` | string[] | `[]` | E.164 numbers or JIDs to never log. Checked before allowlist. |
-| `filters.allowlist` | string[] | `["*"]` | E.164 numbers or JIDs to log. `"*"` means log everything. If non-empty and no wildcard, only matching senders/conversations are logged. |
-| `retentionDays` | number | `90` | Messages older than this many days are pruned on startup. Set to `0` to disable pruning. |
-
-## Agent Tools
-
-Observer data is exposed to agents through four read-only tools:
-
-| Tool | Description | Key Parameters |
-|---|---|---|
-| `wa_observer_search` | Full-text keyword search across stored messages. | `query`, `sender`, `group`, `afterDate`, `beforeDate`, `limit` |
-| `wa_observer_recent` | Retrieve the most recent messages, optionally filtered by conversation or account. | `conversationId`, `accountId`, `limit` |
-| `wa_observer_conversations` | List all observed conversations with message counts and last-activity timestamps. | `accountId`, `limit` |
-| `wa_observer_stats` | Aggregate statistics with optional grouping by sender, group, day, or hour. | `accountId`, `afterDate`, `groupBy` |
-
-## Filter Logic
-
-Filters are evaluated in the following order:
-
-1. **Blocklist first.** If the sender or chat JID matches any pattern in `filters.blocklist`, the message is dropped.
-2. **Allowlist second.** If `filters.allowlist` is non-empty, the message is kept only if the JID matches at least one pattern in the list. If the allowlist is empty (the default), all non-blocked messages are kept.
-
-Matching is exact (case-insensitive) against E.164 numbers or JIDs. The special value `"*"` in the allowlist means "allow everything".
-
-## Running Tests
+## Development
 
 ```bash
+# Run tests
 npx vitest run
+
+# Test CLI locally
+cd cli && npx tsx bin/run.ts --help
+
+# Test a specific CLI command
+cd cli && npx tsx bin/run.ts search "hello" --format table
 ```
-
-## Keeping in Sync with Upstream
-
-This fork is designed to minimise divergence. The changes to upstream files are limited to roughly 40 lines across `channel.ts` and `index.ts`, consisting of conditional branches that detect observer-mode accounts and delegate to the observer subsystem. All observer-specific code is isolated in `src/observer/`. When the upstream WhatsApp plugin is updated, pulling in those changes should produce few or no merge conflicts.
 
 ## License
 
-MIT -- see [LICENSE](./LICENSE).
+MIT
