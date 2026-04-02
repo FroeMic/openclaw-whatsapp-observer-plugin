@@ -168,6 +168,10 @@ node -e "
   fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
 " 2>/dev/null || true
 
+# --- Install root dependencies (needed by CLI imports into src/observer/) ---
+echo "Installing plugin dependencies..."
+cd "$PLUGIN_DIR" && npm install --no-fund --no-audit
+
 # --- Install and link wa-pro CLI ---
 echo "Installing wa-pro CLI..."
 CLI_DIR="$PLUGIN_DIR/cli"
