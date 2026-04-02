@@ -391,7 +391,7 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
         logger?.info(
           `Observer ${accountId}: messages.upsert type=${upsert.type} count=${upsert.messages?.length ?? 0}`,
         );
-        if (upsert.type !== "notify") return;
+        if (upsert.type !== "notify" && upsert.type !== "append") return;
         for (const msg of upsert.messages ?? []) {
           try {
             await processObserverMessage(msg, sock, { accountId, config, db, logger });
