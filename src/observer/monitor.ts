@@ -162,6 +162,13 @@ function waitForCloseOrAbort(
   });
 }
 
+/** Safe jidToE164 that returns null for LID JIDs (which are not real phone numbers). */
+function safeJidToE164(jid: string | null | undefined): string | null {
+  if (!jid) return null;
+  if (jid.endsWith("@lid")) return null;
+  return jidToE164(jid);
+}
+
 export async function processObserverMessage(
   msg: WAMessage,
   sock: ReturnType<typeof makeWASocket> | null,
@@ -216,7 +223,7 @@ export async function processObserverMessage(
 
   const isGroup = isJidGroup(remoteJid);
   const sender = isGroup ? (msg.key?.participant ?? remoteJid) : remoteJid;
-  let senderE164 = jidToE164(sender) ?? jidToE164(altJid);
+  let senderE164 = safeJidToE164(sender) ?? safeJidToE164(altJid);
 
   // Resolve sender LID if still unresolved
   if (!senderE164 && sender.endsWith("@lid") && (ctx.lidLookup || ctx.authDir)) {
@@ -467,7 +474,7 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
             const remoteJid = key.remoteJid;
             if (!remoteJid) continue;
             const reactorJid = reaction.key?.participant ?? reaction.key?.remoteJid ?? remoteJid;
-            const reactorE164 = jidToE164(reactorJid);
+            const reactorE164 = safeJidToE164(reactorJid);
 
             const reactionSettings = db.getAccountSettings(accountId);
             if (reactionSettings.mode === "record-filtered-retrieve-filtered") {
@@ -522,7 +529,7 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
               jid: contact.id,
               accountId,
               pushName: contact.notify ?? contact.name,
-              phone: jidToE164(contact.id) ?? undefined,
+              phone: safeJidToE164(contact.id) ?? undefined,
             });
           }
         }
@@ -564,7 +571,7 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
             jid: update.id,
             accountId,
             pushName: update.notify ?? (existing?.push_name as string) ?? undefined,
-            phone: jidToE164(update.id) ?? (existing?.phone as string) ?? undefined,
+            phone: safeJidToE164(update.id) ?? (existing?.phone as string) ?? undefined,
           });
         }
       });
