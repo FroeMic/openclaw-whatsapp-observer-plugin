@@ -7,9 +7,10 @@ export default class ConfigBlocklist extends Command {
   static override examples = [
     "wa-pro config blocklist list",
     "wa-pro config blocklist add +4917600000001",
-    "wa-pro config blocklist add 120363406173840067@g.us",
+    "wa-pro config blocklist add 120363406173840067@g.us --account michael",
     "wa-pro config blocklist remove +4917600000001",
     "wa-pro config blocklist clear",
+    "wa-pro config blocklist --reset --account michael",
   ];
 
   static override args = {
@@ -25,6 +26,8 @@ export default class ConfigBlocklist extends Command {
   };
 
   static override flags = {
+    account: Flags.string({ description: "Apply to this account (otherwise global)" }),
+    reset: Flags.boolean({ description: "Remove per-account override (fall back to global)", default: false }),
     db: Flags.string({ env: "WA_PRO_DB", description: "Path to observer SQLite database" }),
   };
 
@@ -32,10 +35,30 @@ export default class ConfigBlocklist extends Command {
     const { args, flags } = await this.parse(ConfigBlocklist);
     const dbPath = resolveDbPath(flags.db);
     const db = await openDb(dbPath);
+    const key = "filters.blocklist";
 
     try {
-      const key = "filters.blocklist";
-      const current = parseJsonArray(db.getSetting(key)) ?? [];
+      if (flags.reset && flags.account) {
+        db.resetAccount(flags.account, key);
+        db.flush();
+        process.stdout.write(`Reset blocklist for account ${flags.account} (using global default).\n`);
+        return;
+      }
+
+      const settings = flags.account
+        ? db.getAccountSettings(flags.account)
+        : db.getObserverSettings();
+      const current = [...settings.filters.blocklist];
+
+      const save = (list: string[]) => {
+        const value = JSON.stringify(list);
+        if (flags.account) {
+          db.setAccount(flags.account, key, value);
+        } else {
+          db.setGlobal(key, value);
+        }
+        db.flush();
+      };
 
       switch (args.action) {
         case "list":
@@ -54,8 +77,7 @@ export default class ConfigBlocklist extends Command {
           }
           if (!current.includes(args.entry)) {
             current.push(args.entry);
-            db.setSetting(key, JSON.stringify(current));
-            db.flush();
+            save(current);
             process.stdout.write(`Added: ${args.entry}\n`);
           } else {
             process.stdout.write(`Already in blocklist: ${args.entry}\n`);
@@ -66,32 +88,17 @@ export default class ConfigBlocklist extends Command {
           if (!args.entry) {
             this.error("Entry is required for 'remove' action");
           }
-          {
-            const updated = current.filter((e) => e !== args.entry);
-            db.setSetting(key, JSON.stringify(updated));
-            db.flush();
-            process.stdout.write(`Removed: ${args.entry}\n`);
-          }
+          save(current.filter((e) => e !== args.entry));
+          process.stdout.write(`Removed: ${args.entry}\n`);
           break;
 
         case "clear":
-          db.setSetting(key, "[]");
-          db.flush();
+          save([]);
           process.stdout.write("Blocklist cleared.\n");
           break;
       }
     } finally {
       db.close();
     }
-  }
-}
-
-function parseJsonArray(raw: string | undefined): string[] | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed as string[] : null;
-  } catch {
-    return null;
   }
 }

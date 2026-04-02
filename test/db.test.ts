@@ -510,15 +510,9 @@ describe("ObserverDB", () => {
       expect(db.getSetting("nonexistent")).toBeUndefined();
     });
 
-    it("sets and gets a setting", () => {
-      db.setSetting("mode", "record-all-retrieve-filtered");
-      expect(db.getSetting("mode")).toBe("record-all-retrieve-filtered");
-    });
-
-    it("overwrites existing setting", () => {
-      db.setSetting("mode", "record-all-retrieve-all");
-      db.setSetting("mode", "record-filtered-retrieve-filtered");
-      expect(db.getSetting("mode")).toBe("record-filtered-retrieve-filtered");
+    it("sets and gets a raw setting", () => {
+      db.setSetting("some.key", "value");
+      expect(db.getSetting("some.key")).toBe("value");
     });
 
     it("deletes a setting", () => {
@@ -535,11 +529,11 @@ describe("ObserverDB", () => {
       expect(settings.retentionDays).toBe(90);
     });
 
-    it("getObserverSettings reads stored values", () => {
-      db.setSetting("mode", "record-all-retrieve-filtered");
-      db.setSetting("filters.blocklist", '["bad@s.whatsapp.net"]');
-      db.setSetting("filters.allowlist", '["+4917600000001"]');
-      db.setSetting("retentionDays", "30");
+    it("getObserverSettings reads global values", () => {
+      db.setGlobal("mode", "record-all-retrieve-filtered");
+      db.setGlobal("filters.blocklist", '["bad@s.whatsapp.net"]');
+      db.setGlobal("filters.allowlist", '["+4917600000001"]');
+      db.setGlobal("retentionDays", "30");
 
       const settings = db.getObserverSettings();
       expect(settings.mode).toBe("record-all-retrieve-filtered");
@@ -554,7 +548,7 @@ describe("ObserverDB", () => {
         filters: { blocklist: ["a"], allowlist: ["b"] },
         retentionDays: 60,
       });
-      expect(db.getSetting("mode")).toBe("record-filtered-retrieve-filtered");
+      expect(db.getGlobal("mode")).toBe("record-filtered-retrieve-filtered");
 
       // Second seed should not overwrite
       db.seedSettings({
@@ -562,7 +556,7 @@ describe("ObserverDB", () => {
         filters: { blocklist: [], allowlist: ["*"] },
         retentionDays: 90,
       });
-      expect(db.getSetting("mode")).toBe("record-filtered-retrieve-filtered");
+      expect(db.getGlobal("mode")).toBe("record-filtered-retrieve-filtered");
     });
 
     it("hasSettings returns false when empty, true after seed", () => {
@@ -573,6 +567,64 @@ describe("ObserverDB", () => {
         retentionDays: 90,
       });
       expect(db.hasSettings()).toBe(true);
+    });
+
+    describe("per-account settings", () => {
+      it("account overrides global", () => {
+        db.setGlobal("mode", "record-all-retrieve-all");
+        db.setAccount("michael", "mode", "record-all-retrieve-filtered");
+
+        expect(db.getAccountSettings("michael").mode).toBe("record-all-retrieve-filtered");
+        expect(db.getAccountSettings("main").mode).toBe("record-all-retrieve-all");
+        expect(db.getObserverSettings().mode).toBe("record-all-retrieve-all");
+      });
+
+      it("falls back to global when no account override", () => {
+        db.setGlobal("retentionDays", "60");
+
+        expect(db.getAccountSettings("michael").retentionDays).toBe(60);
+      });
+
+      it("resetAccount removes override", () => {
+        db.setGlobal("mode", "record-all-retrieve-all");
+        db.setAccount("michael", "mode", "record-filtered-retrieve-filtered");
+        expect(db.getAccountSettings("michael").mode).toBe("record-filtered-retrieve-filtered");
+
+        db.resetAccount("michael", "mode");
+        expect(db.getAccountSettings("michael").mode).toBe("record-all-retrieve-all");
+      });
+
+      it("per-account filters are independent", () => {
+        db.setGlobal("filters.allowlist", '["*"]');
+        db.setAccount("michael", "filters.allowlist", '["+4917600000001"]');
+
+        const michael = db.getAccountSettings("michael");
+        const main = db.getAccountSettings("main");
+        expect(michael.filters.allowlist).toEqual(["+4917600000001"]);
+        expect(main.filters.allowlist).toEqual(["*"]);
+      });
+    });
+
+    describe("migrateToScopedKeys", () => {
+      it("migrates unscoped keys to global prefix", () => {
+        db.setSetting("mode", "record-all-retrieve-filtered");
+        db.setSetting("retentionDays", "30");
+        db.migrateToScopedKeys();
+
+        expect(db.getGlobal("mode")).toBe("record-all-retrieve-filtered");
+        expect(db.getGlobal("retentionDays")).toBe("30");
+        // Original unscoped keys should be removed
+        expect(db.getSetting("mode")).toBeUndefined();
+        expect(db.getSetting("retentionDays")).toBeUndefined();
+      });
+
+      it("does not overwrite existing global keys", () => {
+        db.setGlobal("mode", "record-all-retrieve-all");
+        db.setSetting("mode", "record-filtered-retrieve-filtered");
+        db.migrateToScopedKeys();
+
+        expect(db.getGlobal("mode")).toBe("record-all-retrieve-all");
+      });
     });
   });
 

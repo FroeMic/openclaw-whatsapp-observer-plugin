@@ -7,7 +7,8 @@ export default class ConfigRetention extends Command {
   static override examples = [
     "wa-pro config retention",
     "wa-pro config retention 90",
-    "wa-pro config retention 0",
+    "wa-pro config retention 30 --account michael",
+    "wa-pro config retention --reset --account michael",
   ];
 
   static override args = {
@@ -18,6 +19,8 @@ export default class ConfigRetention extends Command {
   };
 
   static override flags = {
+    account: Flags.string({ description: "Apply to this account (otherwise global)" }),
+    reset: Flags.boolean({ description: "Remove per-account override (fall back to global)", default: false }),
     db: Flags.string({ env: "WA_PRO_DB", description: "Path to observer SQLite database" }),
   };
 
@@ -27,19 +30,30 @@ export default class ConfigRetention extends Command {
     const db = await openDb(dbPath);
 
     try {
-      if (args.days !== undefined) {
+      if (flags.reset && flags.account) {
+        db.resetAccount(flags.account, "retentionDays");
+        db.flush();
+        process.stdout.write(`Reset retention for account ${flags.account} (using global default).\n`);
+      } else if (args.days !== undefined) {
         if (args.days < 0) {
           this.error("Retention days must be 0 or positive");
         }
-        db.setSetting("retentionDays", String(args.days));
+        if (flags.account) {
+          db.setAccount(flags.account, "retentionDays", String(args.days));
+        } else {
+          db.setGlobal("retentionDays", String(args.days));
+        }
         db.flush();
+        const scope = flags.account ? `account ${flags.account}` : "global";
         process.stdout.write(
           args.days === 0
-            ? "Retention set to: forever (0)\n"
-            : `Retention set to: ${args.days} days\n`,
+            ? `Retention set to: forever (${scope})\n`
+            : `Retention set to: ${args.days} days (${scope})\n`,
         );
       } else {
-        const settings = db.getObserverSettings();
+        const settings = flags.account
+          ? db.getAccountSettings(flags.account)
+          : db.getObserverSettings();
         process.stdout.write(
           settings.retentionDays === 0
             ? "forever (0)\n"

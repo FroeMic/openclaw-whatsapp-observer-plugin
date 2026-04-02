@@ -124,6 +124,9 @@ export class ObserverDB {
   }
 
   // ── Settings ──────────────────────────────────────────────────────
+  //
+  // Keys are scoped: "global.<key>" for defaults, "account.<id>.<key>" for overrides.
+  // Resolution: account.<id>.<key> ?? global.<key> ?? hardcoded default.
 
   getSetting(key: string): string | undefined {
     const rows = this.query("SELECT value FROM settings WHERE key = :key", { ":key": key });
@@ -143,8 +146,50 @@ export class ObserverDB {
     this.scheduleSave();
   }
 
-  getObserverSettings(): ObserverSettings {
-    const rawMode = this.getSetting("mode");
+  // ── Scoped settings helpers ──────────────────────────────────────
+
+  private resolveSettingKey(scope: string, key: string): string {
+    return `${scope}.${key}`;
+  }
+
+  /** Get a setting, resolving account → global → undefined. */
+  getScoped(accountId: string | undefined, key: string): string | undefined {
+    if (accountId) {
+      const accountVal = this.getSetting(this.resolveSettingKey(`account.${accountId}`, key));
+      if (accountVal !== undefined) return accountVal;
+    }
+    return this.getSetting(this.resolveSettingKey("global", key));
+  }
+
+  /** Set a global setting. */
+  setGlobal(key: string, value: string): void {
+    this.setSetting(this.resolveSettingKey("global", key), value);
+  }
+
+  /** Get a global setting. */
+  getGlobal(key: string): string | undefined {
+    return this.getSetting(this.resolveSettingKey("global", key));
+  }
+
+  /** Set a per-account override. */
+  setAccount(accountId: string, key: string, value: string): void {
+    this.setSetting(this.resolveSettingKey(`account.${accountId}`, key), value);
+  }
+
+  /** Get a per-account override (without global fallback). */
+  getAccount(accountId: string, key: string): string | undefined {
+    return this.getSetting(this.resolveSettingKey(`account.${accountId}`, key));
+  }
+
+  /** Remove a per-account override (falls back to global). */
+  resetAccount(accountId: string, key: string): void {
+    this.deleteSetting(this.resolveSettingKey(`account.${accountId}`, key));
+  }
+
+  // ── Observer settings ────────────────────────────────────────────
+
+  private resolveSettings(accountId?: string): ObserverSettings {
+    const rawMode = this.getScoped(accountId, "mode");
     const mode: ObserverMode =
       rawMode && (OBSERVER_MODES as readonly string[]).includes(rawMode)
         ? (rawMode as ObserverMode)
@@ -152,17 +197,17 @@ export class ObserverDB {
 
     let blocklist: string[] = [];
     try {
-      const raw = this.getSetting("filters.blocklist");
+      const raw = this.getScoped(accountId, "filters.blocklist");
       if (raw) blocklist = JSON.parse(raw) as string[];
     } catch { /* invalid JSON, use default */ }
 
     let allowlist: string[] = ["*"];
     try {
-      const raw = this.getSetting("filters.allowlist");
+      const raw = this.getScoped(accountId, "filters.allowlist");
       if (raw) allowlist = JSON.parse(raw) as string[];
     } catch { /* invalid JSON, use default */ }
 
-    const rawRetention = this.getSetting("retentionDays");
+    const rawRetention = this.getScoped(accountId, "retentionDays");
     const retentionDays = rawRetention ? Number(rawRetention) : 90;
 
     return {
@@ -172,17 +217,40 @@ export class ObserverDB {
     };
   }
 
+  /** Get observer settings for an account (with global fallback). */
+  getAccountSettings(accountId: string): ObserverSettings {
+    return this.resolveSettings(accountId);
+  }
+
+  /** Get global observer settings (no account context). */
+  getObserverSettings(): ObserverSettings {
+    return this.resolveSettings();
+  }
+
   hasSettings(): boolean {
     const rows = this.query("SELECT COUNT(*) AS count FROM settings");
     return (rows[0]?.count as number) > 0;
   }
 
+  /** Seed global defaults. Only writes if no settings exist yet. */
   seedSettings(settings: ObserverSettings): void {
     if (this.hasSettings()) return;
-    this.setSetting("mode", settings.mode);
-    this.setSetting("filters.blocklist", JSON.stringify(settings.filters.blocklist));
-    this.setSetting("filters.allowlist", JSON.stringify(settings.filters.allowlist));
-    this.setSetting("retentionDays", String(settings.retentionDays));
+    this.setGlobal("mode", settings.mode);
+    this.setGlobal("filters.blocklist", JSON.stringify(settings.filters.blocklist));
+    this.setGlobal("filters.allowlist", JSON.stringify(settings.filters.allowlist));
+    this.setGlobal("retentionDays", String(settings.retentionDays));
+  }
+
+  /** Migrate unscoped keys (from before per-account support) to global.* prefix. */
+  migrateToScopedKeys(): void {
+    const legacyKeys = ["mode", "filters.blocklist", "filters.allowlist", "retentionDays"];
+    for (const key of legacyKeys) {
+      const legacy = this.getSetting(key);
+      if (legacy !== undefined && this.getGlobal(key) === undefined) {
+        this.setGlobal(key, legacy);
+        this.deleteSetting(key);
+      }
+    }
   }
 
   // ── Persistence ──────────────────────────────────────────────────

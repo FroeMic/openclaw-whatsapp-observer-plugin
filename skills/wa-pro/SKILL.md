@@ -74,18 +74,17 @@ Shows all configured accounts with role (observer/normal), linked status, polici
 ### View observer settings
 
 ```bash
-wa-pro config show [--format json|table]
+wa-pro config show                        # global defaults
+wa-pro config show --account michael      # per-account (with global fallback)
 ```
-
-Shows current mode, retention, allowlist, and blocklist from the observer database.
 
 ### Change observer mode
 
 ```bash
-wa-pro config mode                                     # show current
-wa-pro config mode record-all-retrieve-all             # ingest all, query all
-wa-pro config mode record-all-retrieve-filtered        # ingest all, filter queries
-wa-pro config mode record-filtered-retrieve-filtered   # filter at ingestion
+wa-pro config mode                                                    # show global
+wa-pro config mode record-all-retrieve-all                            # set global
+wa-pro config mode record-all-retrieve-filtered --account michael     # set per-account
+wa-pro config mode --reset --account michael                          # remove override
 ```
 
 ### Manage allowlist
@@ -93,27 +92,32 @@ wa-pro config mode record-filtered-retrieve-filtered   # filter at ingestion
 ```bash
 wa-pro config allowlist list
 wa-pro config allowlist add +4917600000001
-wa-pro config allowlist add 120363406173840067@g.us
+wa-pro config allowlist add 120363406173840067@g.us --account michael
 wa-pro config allowlist remove +4917600000001
 wa-pro config allowlist clear
+wa-pro config allowlist --reset --account michael
 ```
 
 ### Manage blocklist
 
 ```bash
 wa-pro config blocklist list
-wa-pro config blocklist add +4917600000001
+wa-pro config blocklist add +4917600000001 --account michael
 wa-pro config blocklist remove +4917600000001
 wa-pro config blocklist clear
+wa-pro config blocklist --reset --account michael
 ```
 
 ### Set retention
 
 ```bash
-wa-pro config retention          # show current
-wa-pro config retention 90       # 90 days
-wa-pro config retention 0        # keep forever
+wa-pro config retention                           # show global
+wa-pro config retention 90                        # set global
+wa-pro config retention 30 --account michael      # set per-account
+wa-pro config retention --reset --account michael # remove override
 ```
+
+All config commands support `--account <id>` for per-account overrides. Without `--account`, they operate on global defaults. Per-account settings inherit from global when not explicitly set. Use `--reset --account <id>` to remove an override.
 
 ## Notes
 

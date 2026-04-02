@@ -33,7 +33,10 @@ export default definePluginEntry({
       dbInitPromise.then((db) => {
         observerDb = db;
 
-        // Seed DB settings from openclaw.json on first run (migration)
+        // Migrate unscoped keys to global.* prefix (one-time, from before per-account support)
+        db.migrateToScopedKeys();
+
+        // Seed global defaults from openclaw.json on first run
         db.seedSettings({
           mode: config.mode,
           filters: config.filters,

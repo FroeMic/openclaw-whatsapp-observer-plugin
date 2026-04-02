@@ -176,9 +176,11 @@ export async function processObserverMessage(
   }
 
   // Apply blocklist/allowlist at ingestion time only in record-filtered mode
-  if (ctx.config.mode === "record-filtered-retrieve-filtered") {
-    if (isBlocked(senderE164 ?? sender, remoteJid, ctx.config.filters)) return;
-    if (!isAllowed(senderE164 ?? sender, remoteJid, ctx.config.filters)) return;
+  // Use per-account settings from DB when available, otherwise fall back to config
+  const accountSettings = ctx.db.getAccountSettings(ctx.accountId);
+  if (accountSettings.mode === "record-filtered-retrieve-filtered") {
+    if (isBlocked(senderE164 ?? sender, remoteJid, accountSettings.filters)) return;
+    if (!isAllowed(senderE164 ?? sender, remoteJid, accountSettings.filters)) return;
   }
 
   const timestamp = ((msg.messageTimestamp as number) ?? 0) * 1000 || Date.now();
@@ -410,9 +412,10 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
             const reactorJid = reaction.key?.participant ?? reaction.key?.remoteJid ?? remoteJid;
             const reactorE164 = jidToE164(reactorJid);
 
-            if (config.mode === "record-filtered-retrieve-filtered") {
-              if (isBlocked(reactorE164 ?? reactorJid, remoteJid, config.filters)) continue;
-              if (!isAllowed(reactorE164 ?? reactorJid, remoteJid, config.filters)) continue;
+            const reactionSettings = db.getAccountSettings(accountId);
+            if (reactionSettings.mode === "record-filtered-retrieve-filtered") {
+              if (isBlocked(reactorE164 ?? reactorJid, remoteJid, reactionSettings.filters)) continue;
+              if (!isAllowed(reactorE164 ?? reactorJid, remoteJid, reactionSettings.filters)) continue;
             }
 
             db.insertMessage({
