@@ -168,24 +168,38 @@ else
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     let changed = false;
 
-    if (cfg.channels?.['whatsapp-pro']) {
-      delete cfg.channels['whatsapp-pro'];
-      if (Object.keys(cfg.channels).length === 0) delete cfg.channels;
-      console.log('  Removed channels.whatsapp-pro');
-      changed = true;
+    // Remove channel configs
+    for (const key of ['whatsapp-pro', 'whatsapp']) {
+      if (cfg.channels?.[key]) {
+        delete cfg.channels[key];
+        console.log('  Removed channels.' + key);
+        changed = true;
+      }
     }
-    if (cfg.plugins?.entries?.['whatsapp-pro']) {
-      delete cfg.plugins.entries['whatsapp-pro'];
-      if (Object.keys(cfg.plugins.entries).length === 0) delete cfg.plugins.entries;
-      console.log('  Removed plugins.entries.whatsapp-pro');
-      changed = true;
+    if (cfg.channels && Object.keys(cfg.channels).length === 0) delete cfg.channels;
+
+    // Remove plugin entries
+    for (const key of ['whatsapp-pro', 'whatsapp']) {
+      if (cfg.plugins?.entries?.[key]) {
+        delete cfg.plugins.entries[key];
+        console.log('  Removed plugins.entries.' + key);
+        changed = true;
+      }
     }
-    if (cfg.plugins?.entries?.whatsapp?.enabled === false) {
-      delete cfg.plugins.entries.whatsapp;
-      if (Object.keys(cfg.plugins.entries).length === 0) delete cfg.plugins.entries;
-      console.log('  Removed disabled plugins.entries.whatsapp');
-      changed = true;
+    if (cfg.plugins?.entries && Object.keys(cfg.plugins.entries).length === 0) delete cfg.plugins.entries;
+
+    // Remove from plugins.allow array
+    if (Array.isArray(cfg.plugins?.allow)) {
+      const before = cfg.plugins.allow.length;
+      cfg.plugins.allow = cfg.plugins.allow.filter(id => id !== 'whatsapp-pro' && id !== 'whatsapp');
+      if (cfg.plugins.allow.length < before) {
+        console.log('  Removed whatsapp/whatsapp-pro from plugins.allow');
+        changed = true;
+      }
+      if (cfg.plugins.allow.length === 0) delete cfg.plugins.allow;
     }
+
+    if (cfg.plugins && Object.keys(cfg.plugins).length === 0) delete cfg.plugins;
 
     if (changed) {
       fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
