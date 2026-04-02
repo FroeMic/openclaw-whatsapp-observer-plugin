@@ -7,6 +7,7 @@ import {
 // Observer mode imports
 import { startObserverMonitor } from "./observer/monitor.js";
 import { isObserverAccount } from "./observer-config.js";
+import { createWhatsAppLoginTool } from "./agent-tools-login.js";
 import type { ObserverDB } from "./observer/db.js";
 import type { ObserverConfig } from "./observer/types.js";
 
@@ -82,9 +83,9 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
       ...createWhatsAppOutboundBase({
         chunker: (text, limit) => getWhatsAppRuntime().channel.text.chunkText(text, limit),
         sendMessageWhatsApp: async (...args) =>
-          await getWhatsAppRuntime().channel["whatsapp-pro"].sendMessageWhatsApp(...args),
+          await (await import("./send.js")).sendMessageWhatsApp(...args),
         sendPollWhatsApp: async (...args) =>
-          await getWhatsAppRuntime().channel["whatsapp-pro"].sendPollWhatsApp(...args),
+          await (await import("./send.js")).sendPollWhatsApp(...args),
         shouldLogVerbose: () => getWhatsAppRuntime().logging.shouldLogVerbose(),
         resolveTarget: ({ to, allowFrom, mode }) =>
           resolveWhatsAppOutboundTarget({ to, allowFrom, mode }),
@@ -104,9 +105,9 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
         setupWizard: whatsappSetupWizardProxy,
         setup: whatsappSetupAdapter,
         isConfigured: async (account) =>
-          await getWhatsAppRuntime().channel["whatsapp-pro"].webAuthExists(account.authDir),
+          await (await loadWhatsAppChannelRuntime()).webAuthExists(account.authDir),
       }),
-      agentTools: () => [getWhatsAppRuntime().channel["whatsapp-pro"].createLoginTool()],
+      agentTools: () => [createWhatsAppLoginTool()],
       allowlist: buildDmGroupAccountAllowlistAdapter({
         channelId: WHATSAPP_CHANNEL,
         resolveAccount: resolveWhatsAppAccount,
@@ -177,7 +178,7 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
           });
           const emoji = readStringParam(params, "emoji", { allowEmpty: true });
           const remove = typeof params.remove === "boolean" ? params.remove : undefined;
-          return await getWhatsAppRuntime().channel["whatsapp-pro"].handleWhatsAppAction(
+          return await (await import("./action-runtime.js")).handleWhatsAppAction(
             {
               action: "react",
               chatJid:
