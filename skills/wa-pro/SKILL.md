@@ -55,6 +55,14 @@ wa-pro recent [--conversation <jid>] [--sender <name>] [--account <id>] [--limit
 wa-pro conversations [--account <id>] [--limit <N>]
 ```
 
+### Setup / link account
+
+```bash
+wa-pro setup <account> [--format qr|text|json] [--timeout <seconds>] [--force]
+```
+
+Link a WhatsApp account by QR code. Default shows QR in terminal. Use `--format text` to get the raw QR string (for remote/API use) or `--format json` for structured output.
+
 ### Backfill history
 
 ```bash
