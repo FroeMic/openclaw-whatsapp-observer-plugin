@@ -143,15 +143,19 @@ if [ -d "$EXTENSION_DIR" ]; then
   rm -rf "$EXTENSION_DIR"
 fi
 
-# --- Clean up stale whatsapp-pro config from previous installs ---
-# openclaw plugins install validates config before installing. If a previous
-# install left channels.whatsapp-pro in config but the extension dir was removed,
-# openclaw rejects it as "unknown channel id". Remove it so install succeeds.
-node -e "
+# --- Temporarily remove stale whatsapp-pro config for install ---
+# openclaw plugins install validates config. If a previous install left
+# channels.whatsapp-pro but the extension dir was removed, it rejects
+# "unknown channel id". Save it, remove for install, restore after.
+SAVED_CHANNEL_CONFIG=$(node -e "
   const fs = require('fs');
   const configPath = '$CONFIG_PATH';
   if (!fs.existsSync(configPath)) process.exit(0);
   const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  // Save existing channel config to restore after install
+  const saved = cfg.channels?.['whatsapp-pro'];
+  if (saved) console.log(JSON.stringify(saved));
+  // Remove for install validation
   let changed = false;
   if (cfg.channels?.['whatsapp-pro']) {
     delete cfg.channels['whatsapp-pro'];
@@ -167,13 +171,11 @@ node -e "
     const before = cfg.plugins.allow.length;
     cfg.plugins.allow = cfg.plugins.allow.filter(id => id !== 'whatsapp-pro');
     if (cfg.plugins.allow.length < before) changed = true;
-    // Don't delete plugins.allow when empty — openclaw needs it to exist
   }
   if (changed) {
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
-    console.log('  Cleaned up stale whatsapp-pro config from previous install.');
   }
-" 2>/dev/null || true
+" 2>/dev/null || echo "")
 
 # --- Install plugin ---
 echo "Installing whatsapp-pro plugin..."
@@ -203,7 +205,7 @@ node -e "
   }
 " 2>/dev/null || true
 
-# --- Save meta (after plugin is installed so openclaw knows the channel ID) ---
+# --- Restore saved channel config + save meta ---
 node -e "
   const fs = require('fs');
   const configPath = '$CONFIG_PATH';
@@ -211,12 +213,25 @@ node -e "
   const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
   if (!cfg.channels) cfg.channels = {};
+
+  // Restore saved channel config (accounts, observer settings, etc.)
+  const savedJson = process.argv[1];
+  if (savedJson) {
+    try {
+      const saved = JSON.parse(savedJson);
+      // Merge: saved config is base, any new fields from install on top
+      cfg.channels['whatsapp-pro'] = { ...saved, ...cfg.channels['whatsapp-pro'] };
+      console.log('  Restored existing channels.whatsapp-pro config.');
+    } catch {}
+  }
+
+  // Ensure meta exists
   if (!cfg.channels['whatsapp-pro']) cfg.channels['whatsapp-pro'] = {};
   if (!cfg.channels['whatsapp-pro'].meta) cfg.channels['whatsapp-pro'].meta = {};
   cfg.channels['whatsapp-pro'].meta.previousWhatsappEnabled = $WA_WAS_ENABLED;
 
   fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
-" 2>/dev/null || true
+" "$SAVED_CHANNEL_CONFIG" 2>/dev/null || true
 
 # --- Install root dependencies (needed by CLI imports into src/observer/) ---
 echo "Installing plugin dependencies..."
