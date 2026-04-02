@@ -69,20 +69,26 @@ elif [ "$HAS_WA_CONFIG" = "no" ]; then
 fi
 
 # --- Record whether built-in whatsapp was enabled before we touch it ---
-STATE_DIR="${HOME}/.openclaw/extensions/whatsapp-pro"
-WA_WAS_ENABLED=$(node -e "
+# Stored in channels.whatsapp-pro.meta.previousWhatsappEnabled so it
+# survives reinstalls and lives alongside the config.
+node -e "
   const fs = require('fs');
-  try {
-    const cfg = JSON.parse(fs.readFileSync('$CONFIG_PATH', 'utf8'));
-    // Enabled if: channels.whatsapp exists AND plugins.entries.whatsapp.enabled !== false
-    const hasChannel = cfg.channels?.whatsapp !== undefined;
-    const pluginDisabled = cfg.plugins?.entries?.whatsapp?.enabled === false;
-    console.log(hasChannel && !pluginDisabled ? 'yes' : 'no');
-  } catch { console.log('no'); }
-" 2>/dev/null || echo "no")
-mkdir -p "$STATE_DIR"
-echo "$WA_WAS_ENABLED" > "$STATE_DIR/.wa-was-enabled"
-echo "Built-in whatsapp was previously enabled: $WA_WAS_ENABLED"
+  const configPath = '$CONFIG_PATH';
+  if (!fs.existsSync(configPath)) process.exit(0);
+  const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+  const hasChannel = cfg.channels?.whatsapp !== undefined;
+  const pluginDisabled = cfg.plugins?.entries?.whatsapp?.enabled === false;
+  const wasEnabled = hasChannel && !pluginDisabled;
+
+  if (!cfg.channels) cfg.channels = {};
+  if (!cfg.channels['whatsapp-pro']) cfg.channels['whatsapp-pro'] = {};
+  if (!cfg.channels['whatsapp-pro'].meta) cfg.channels['whatsapp-pro'].meta = {};
+  cfg.channels['whatsapp-pro'].meta.previousWhatsappEnabled = wasEnabled;
+
+  fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
+  console.log('Built-in whatsapp was previously enabled: ' + wasEnabled);
+" 2>/dev/null || true
 
 # --- Migrate or disable built-in whatsapp ---
 if [ "$MIGRATE" = "yes" ]; then

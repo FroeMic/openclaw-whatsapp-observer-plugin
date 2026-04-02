@@ -31,8 +31,18 @@ export const ObserverConfigSchema = z.object({
  * Since WhatsAppConfigSchema uses .strict().superRefine() we cannot call
  * .extend() on it directly, so we reconstruct via .passthrough() + merge.
  */
+/**
+ * Install/uninstall metadata persisted in the channel config.
+ */
+export const ChannelMetaSchema = z.object({
+  previousWhatsappEnabled: z.boolean().optional(),
+});
+
 export const WhatsAppProConfigSchema = WhatsAppConfigSchema.passthrough().and(
-  z.object({ observer: ObserverConfigSchema.optional() }),
+  z.object({
+    observer: ObserverConfigSchema.optional(),
+    meta: ChannelMetaSchema.optional(),
+  }),
 );
 
 /** Inferred TypeScript type for the full whatsapp-pro channel config. */

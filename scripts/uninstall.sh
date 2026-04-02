@@ -215,13 +215,21 @@ if $PURGE_CREDS; then
 fi
 
 # --- Conditionally re-enable built-in whatsapp plugin ---
-STATE_FILE="${EXTENSION_DIR}/.wa-was-enabled"
+# Read saved state from the config backup (before we modified it)
+WA_WAS_ENABLED=$(node -e "
+  const fs = require('fs');
+  try {
+    const cfg = JSON.parse(fs.readFileSync('$BACKUP_PATH', 'utf8'));
+    console.log(cfg.channels?.['whatsapp-pro']?.meta?.previousWhatsappEnabled === true ? 'yes' : 'no');
+  } catch { console.log('no'); }
+" 2>/dev/null || echo "no")
+
 if [ "$RESTORE_WA" = "yes" ]; then
   echo "Re-enabling built-in whatsapp plugin (--restore-whatsapp)..."
   openclaw plugins enable whatsapp 2>/dev/null || true
 elif [ "$RESTORE_WA" = "no" ]; then
   echo "Skipping built-in whatsapp restore (--no-restore-whatsapp)."
-elif [ -f "$STATE_FILE" ] && [ "$(cat "$STATE_FILE" 2>/dev/null)" = "yes" ]; then
+elif [ "$WA_WAS_ENABLED" = "yes" ]; then
   echo "Re-enabling built-in whatsapp plugin (was enabled before install)..."
   openclaw plugins enable whatsapp 2>/dev/null || true
 else
