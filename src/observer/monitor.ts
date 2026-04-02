@@ -369,7 +369,7 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
         logger: silentLogger as never,
         printQRInTerminal: false,
         browser: ["openclaw-observer", "cli", "1.0.0"],
-        syncFullHistory: false,
+        syncFullHistory: true,
         markOnlineOnConnect: false,
       });
 
@@ -433,6 +433,127 @@ export async function startObserverMonitor(params: ObserverMonitorParams): Promi
             });
           } catch (err) {
             logger?.error(`Observer ${accountId}: reaction processing error: ${String(err)}`);
+          }
+        }
+      });
+
+      // Listen for history sync (initial + on-demand backfill)
+      sock.ev.on("messaging-history.set" as never, (data: {
+        chats?: Array<{ id?: string; name?: string }>;
+        contacts?: Array<{ id?: string; notify?: string; name?: string }>;
+        messages?: Array<WAMessage>;
+        isLatest?: boolean;
+      }) => {
+        const msgCount = data.messages?.length ?? 0;
+        const contactCount = data.contacts?.length ?? 0;
+        logger?.info(`Observer ${accountId}: history sync — ${msgCount} messages, ${contactCount} contacts`);
+
+        // Process historical messages
+        if (data.messages) {
+          for (const msg of data.messages) {
+            processObserverMessage(msg, sock, { accountId, config, db, logger }).catch((err) => {
+              logger?.error(`Observer ${accountId}: history message error: ${String(err)}`);
+            });
+          }
+        }
+
+        // Store contacts
+        if (data.contacts) {
+          for (const contact of data.contacts) {
+            if (!contact.id) continue;
+            db.upsertContact({
+              jid: contact.id,
+              accountId,
+              pushName: contact.notify ?? contact.name,
+              phone: jidToE164(contact.id) ?? undefined,
+            });
+          }
+        }
+
+        // Store chat metadata as group contacts
+        if (data.chats) {
+          for (const chat of data.chats) {
+            if (!chat.id || !chat.name) continue;
+            if (isJidGroup(chat.id)) {
+              db.upsertContact({
+                jid: chat.id,
+                accountId,
+                isGroup: true,
+                groupSubject: chat.name,
+              });
+            }
+          }
+        }
+      });
+
+      // Listen for contact updates
+      sock.ev.on("contacts.upsert", (contacts) => {
+        for (const contact of contacts) {
+          if (!contact.id) continue;
+          db.upsertContact({
+            jid: contact.id,
+            accountId,
+            pushName: contact.notify ?? contact.name,
+            phone: jidToE164(contact.id) ?? undefined,
+          });
+        }
+      });
+
+      sock.ev.on("contacts.update", (updates) => {
+        for (const update of updates) {
+          if (!update.id) continue;
+          const existing = db.getContact(update.id);
+          db.upsertContact({
+            jid: update.id,
+            accountId,
+            pushName: update.notify ?? (existing?.push_name as string) ?? undefined,
+            phone: jidToE164(update.id) ?? (existing?.phone as string) ?? undefined,
+          });
+        }
+      });
+
+      // Listen for group metadata updates
+      sock.ev.on("groups.upsert", (groups) => {
+        for (const group of groups) {
+          if (!group.id) continue;
+          db.upsertContact({
+            jid: group.id,
+            accountId,
+            isGroup: true,
+            groupSubject: group.subject,
+          });
+        }
+      });
+
+      sock.ev.on("groups.update", (updates) => {
+        for (const update of updates) {
+          if (!update.id) continue;
+          db.upsertContact({
+            jid: update.id,
+            accountId,
+            isGroup: true,
+            groupSubject: update.subject ?? undefined,
+          });
+        }
+      });
+
+      // Listen for message edits
+      sock.ev.on("messages.update", (updates) => {
+        for (const update of updates) {
+          if (!update.key?.remoteJid || !update.key?.id) continue;
+          if (update.update?.messageStubType === 1) {
+            // Message revoked/deleted
+            db.insertMessage({
+              messageId: update.key.id,
+              accountId,
+              sender: update.key.participant ?? update.key.remoteJid ?? "unknown",
+              conversationId: update.key.remoteJid,
+              isGroup: isJidGroup(update.key.remoteJid),
+              messageType: "delete",
+              refMessageId: update.key.id,
+              source: "observer",
+              timestamp: Date.now(),
+            });
           }
         }
       });

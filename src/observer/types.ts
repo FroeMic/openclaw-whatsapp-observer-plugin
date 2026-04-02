@@ -76,6 +76,17 @@ export type StatsGroupByResult = {
   count: number;
 };
 
+export type ContactInfo = {
+  jid: string;
+  accountId: string;
+  phone?: string;
+  pushName?: string;
+  businessName?: string;
+  isGroup: boolean;
+  groupSubject?: string;
+  groupDescription?: string;
+};
+
 export type ChannelLogSink = {
   info: (msg: string) => void;
   warn: (msg: string) => void;

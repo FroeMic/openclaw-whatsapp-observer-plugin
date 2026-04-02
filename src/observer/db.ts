@@ -46,12 +46,48 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS contacts (
+  jid TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  phone TEXT,
+  push_name TEXT,
+  business_name TEXT,
+  is_group INTEGER NOT NULL DEFAULT 0,
+  group_subject TEXT,
+  group_description TEXT,
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_contacts_account ON contacts(account_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone);
 `;
 
 const MIGRATION_COLUMNS = [
   "ALTER TABLE messages ADD COLUMN message_type TEXT NOT NULL DEFAULT 'message';",
   "ALTER TABLE messages ADD COLUMN ref_message_id TEXT;",
   "ALTER TABLE messages ADD COLUMN source TEXT NOT NULL DEFAULT 'observer';",
+];
+
+const FTS_SETUP = [
+  `CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+    content, sender_name, group_name,
+    content='messages', content_rowid='id'
+  );`,
+  `CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
+    INSERT INTO messages_fts(rowid, content, sender_name, group_name)
+    VALUES (new.id, new.content, new.sender_name, new.group_name);
+  END;`,
+  `CREATE TRIGGER IF NOT EXISTS messages_fts_delete AFTER DELETE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, content, sender_name, group_name)
+    VALUES ('delete', old.id, old.content, old.sender_name, old.group_name);
+  END;`,
+  `CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, content, sender_name, group_name)
+    VALUES ('delete', old.id, old.content, old.sender_name, old.group_name);
+    INSERT INTO messages_fts(rowid, content, sender_name, group_name)
+    VALUES (new.id, new.content, new.sender_name, new.group_name);
+  END;`,
 ];
 
 const INSERT_SQL = `
@@ -110,6 +146,8 @@ export class ObserverDB {
     return new ObserverDB(db, dbPath);
   }
 
+  private ftsEnabled = false;
+
   private init(): void {
     this.db.run("PRAGMA journal_mode = WAL;");
     this.db.run("PRAGMA foreign_keys = ON;");
@@ -119,6 +157,16 @@ export class ObserverDB {
         this.db.run(stmt);
       } catch {
         // Column already exists
+      }
+    }
+    // FTS5 setup — may fail if sql.js was built without FTS5 support
+    for (const stmt of FTS_SETUP) {
+      try {
+        this.db.run(stmt);
+        this.ftsEnabled = true;
+      } catch {
+        this.ftsEnabled = false;
+        break;
       }
     }
   }
@@ -241,6 +289,160 @@ export class ObserverDB {
     this.setGlobal("retentionDays", String(settings.retentionDays));
   }
 
+  // ── Contacts ──────────────────────────────────────────────────────
+
+  upsertContact(contact: {
+    jid: string;
+    accountId: string;
+    phone?: string;
+    pushName?: string;
+    businessName?: string;
+    isGroup?: boolean;
+    groupSubject?: string;
+    groupDescription?: string;
+  }): void {
+    this.db.run(
+      `INSERT OR REPLACE INTO contacts (jid, account_id, phone, push_name, business_name, is_group, group_subject, group_description, updated_at)
+       VALUES (:jid, :accountId, :phone, :pushName, :businessName, :isGroup, :groupSubject, :groupDescription, :updatedAt)`,
+      {
+        ":jid": contact.jid,
+        ":accountId": contact.accountId,
+        ":phone": contact.phone ?? null,
+        ":pushName": contact.pushName ?? null,
+        ":businessName": contact.businessName ?? null,
+        ":isGroup": contact.isGroup ? 1 : 0,
+        ":groupSubject": contact.groupSubject ?? null,
+        ":groupDescription": contact.groupDescription ?? null,
+        ":updatedAt": Date.now(),
+      },
+    );
+    this.scheduleSave();
+  }
+
+  getContact(jid: string): Record<string, unknown> | undefined {
+    const rows = this.query("SELECT * FROM contacts WHERE jid = :jid", { ":jid": jid });
+    return rows[0];
+  }
+
+  listContacts(params: {
+    accountId?: string;
+    isGroup?: boolean;
+    limit?: number;
+  }): Array<Record<string, unknown>> {
+    const conditions: string[] = [];
+    const binds: Record<string, unknown> = {};
+    if (params.accountId) {
+      conditions.push("account_id = :accountId");
+      binds[":accountId"] = params.accountId;
+    }
+    if (params.isGroup !== undefined) {
+      conditions.push("is_group = :isGroup");
+      binds[":isGroup"] = params.isGroup ? 1 : 0;
+    }
+    const limit = Math.min(params.limit ?? 200, 500);
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    return this.query(
+      `SELECT * FROM contacts ${where} ORDER BY updated_at DESC LIMIT :limit`,
+      { ...binds, ":limit": limit },
+    );
+  }
+
+  /** Resolve a JID to a display name using the contacts table. */
+  resolveContactName(jid: string): string | undefined {
+    const contact = this.getContact(jid);
+    if (!contact) return undefined;
+    return (contact.push_name as string)
+      ?? (contact.business_name as string)
+      ?? (contact.group_subject as string)
+      ?? (contact.phone as string)
+      ?? undefined;
+  }
+
+  // ── FTS Search ───────────────────────────────────────────────────
+
+  /** Full-text search using FTS5 when available, LIKE fallback otherwise. */
+  searchFts(params: {
+    query: string;
+    sender?: string;
+    group?: string;
+    afterDate?: number;
+    beforeDate?: number;
+    accountId?: string;
+    limit?: number;
+  }): Array<Record<string, unknown>> {
+    if (this.ftsEnabled) {
+      return this.searchWithFts5(params);
+    }
+    return this.search(params);
+  }
+
+  private searchWithFts5(params: {
+    query: string;
+    sender?: string;
+    group?: string;
+    afterDate?: number;
+    beforeDate?: number;
+    accountId?: string;
+    limit?: number;
+  }): Array<Record<string, unknown>> {
+    const conditions: string[] = ["messages_fts MATCH :ftsQuery"];
+    const binds: Record<string, unknown> = {
+      ":ftsQuery": params.query.split(/\s+/).filter(Boolean).map(t => `"${t}"`).join(" OR "),
+    };
+
+    if (params.sender) {
+      conditions.push("(m.sender = :sender OR m.sender_e164 = :sender OR m.sender_name LIKE :senderLike)");
+      binds[":sender"] = params.sender;
+      binds[":senderLike"] = `%${params.sender}%`;
+    }
+    if (params.group) {
+      conditions.push("(m.conversation_id = :group OR m.group_name LIKE :groupLike)");
+      binds[":group"] = params.group;
+      binds[":groupLike"] = `%${params.group}%`;
+    }
+    if (params.afterDate) {
+      conditions.push("m.timestamp >= :afterDate");
+      binds[":afterDate"] = params.afterDate;
+    }
+    if (params.beforeDate) {
+      conditions.push("m.timestamp <= :beforeDate");
+      binds[":beforeDate"] = params.beforeDate;
+    }
+    if (params.accountId) {
+      conditions.push("m.account_id = :accountId");
+      binds[":accountId"] = params.accountId;
+    }
+
+    const limit = Math.min(params.limit ?? 50, 200);
+    const where = conditions.join(" AND ");
+
+    return this.query(
+      `SELECT m.* FROM messages m
+       JOIN messages_fts ON messages_fts.rowid = m.id
+       WHERE ${where}
+       ORDER BY m.timestamp DESC
+       LIMIT :limit`,
+      { ...binds, ":limit": limit },
+    );
+  }
+
+  /** Get the oldest message for a conversation (used as anchor for backfill). */
+  getOldestMessage(conversationId: string, accountId?: string): Record<string, unknown> | undefined {
+    const conditions = ["conversation_id = :conversationId"];
+    const binds: Record<string, unknown> = { ":conversationId": conversationId };
+    if (accountId) {
+      conditions.push("account_id = :accountId");
+      binds[":accountId"] = accountId;
+    }
+    const rows = this.query(
+      `SELECT * FROM messages WHERE ${conditions.join(" AND ")} ORDER BY timestamp ASC LIMIT 1`,
+      binds,
+    );
+    return rows[0];
+  }
+
+  // ── Key migration ────────────────────────────────────────────────
+
   /** Migrate unscoped keys (from before per-account support) to global.* prefix. */
   migrateToScopedKeys(): void {
     const legacyKeys = ["mode", "filters.blocklist", "filters.allowlist", "retentionDays"];
@@ -314,6 +516,7 @@ export class ObserverDB {
     group?: string;
     afterDate?: number;
     beforeDate?: number;
+    accountId?: string;
     limit?: number;
   }): Array<Record<string, unknown>> {
     const conditions: string[] = [];
@@ -342,6 +545,10 @@ export class ObserverDB {
     if (params.beforeDate) {
       conditions.push("m.timestamp <= :beforeDate");
       binds[":beforeDate"] = params.beforeDate;
+    }
+    if (params.accountId) {
+      conditions.push("m.account_id = :accountId");
+      binds[":accountId"] = params.accountId;
     }
 
     if (conditions.length === 0) {

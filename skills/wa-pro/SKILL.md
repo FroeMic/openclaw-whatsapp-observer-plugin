@@ -55,6 +55,14 @@ wa-pro recent [--conversation <jid>] [--sender <name>] [--account <id>] [--limit
 wa-pro conversations [--account <id>] [--limit <N>]
 ```
 
+### List known contacts
+
+```bash
+wa-pro contacts [--account <id>] [--groups] [--people] [--limit <N>]
+```
+
+List contacts and groups discovered from WhatsApp. Contacts are collected automatically from message history sync and live events.
+
 ### Message statistics
 
 ```bash

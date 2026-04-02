@@ -628,6 +628,131 @@ describe("ObserverDB", () => {
     });
   });
 
+  describe("contacts", () => {
+    it("upserts and retrieves a contact", () => {
+      db.upsertContact({
+        jid: "4917600000001@s.whatsapp.net",
+        accountId: "main",
+        phone: "+4917600000001",
+        pushName: "Alice",
+      });
+
+      const contact = db.getContact("4917600000001@s.whatsapp.net");
+      expect(contact).toBeDefined();
+      expect(contact?.push_name).toBe("Alice");
+      expect(contact?.phone).toBe("+4917600000001");
+    });
+
+    it("updates existing contact on re-upsert", () => {
+      db.upsertContact({ jid: "test@s.whatsapp.net", accountId: "main", pushName: "Old Name" });
+      db.upsertContact({ jid: "test@s.whatsapp.net", accountId: "main", pushName: "New Name" });
+
+      const contact = db.getContact("test@s.whatsapp.net");
+      expect(contact?.push_name).toBe("New Name");
+    });
+
+    it("upserts a group contact", () => {
+      db.upsertContact({
+        jid: "120363406173840067@g.us",
+        accountId: "main",
+        isGroup: true,
+        groupSubject: "Team Chat",
+      });
+
+      const contact = db.getContact("120363406173840067@g.us");
+      expect(contact?.is_group).toBe(1);
+      expect(contact?.group_subject).toBe("Team Chat");
+    });
+
+    it("lists contacts filtered by account", () => {
+      db.upsertContact({ jid: "a@s.whatsapp.net", accountId: "main", pushName: "A" });
+      db.upsertContact({ jid: "b@s.whatsapp.net", accountId: "michael", pushName: "B" });
+
+      const mainContacts = db.listContacts({ accountId: "main" });
+      expect(mainContacts).toHaveLength(1);
+      expect(mainContacts[0].push_name).toBe("A");
+    });
+
+    it("lists only groups", () => {
+      db.upsertContact({ jid: "person@s.whatsapp.net", accountId: "main", pushName: "Person" });
+      db.upsertContact({ jid: "group@g.us", accountId: "main", isGroup: true, groupSubject: "Group" });
+
+      const groups = db.listContacts({ isGroup: true });
+      expect(groups).toHaveLength(1);
+      expect(groups[0].group_subject).toBe("Group");
+    });
+
+    it("resolves contact name", () => {
+      db.upsertContact({ jid: "test@s.whatsapp.net", accountId: "main", pushName: "Alice" });
+      expect(db.resolveContactName("test@s.whatsapp.net")).toBe("Alice");
+      expect(db.resolveContactName("unknown@s.whatsapp.net")).toBeUndefined();
+    });
+
+    it("resolves group name from contact", () => {
+      db.upsertContact({ jid: "group@g.us", accountId: "main", isGroup: true, groupSubject: "Dev Team" });
+      expect(db.resolveContactName("group@g.us")).toBe("Dev Team");
+    });
+  });
+
+  describe("FTS search", () => {
+    it("searchFts returns results (FTS5 or LIKE fallback)", () => {
+      db.insertMessage({
+        messageId: "fts1",
+        accountId: "main",
+        sender: "alice@s.whatsapp.net",
+        senderName: "Alice",
+        conversationId: "alice@s.whatsapp.net",
+        isGroup: false,
+        content: "Hello world this is a test",
+        timestamp: 1000,
+      });
+      db.insertMessage({
+        messageId: "fts2",
+        accountId: "main",
+        sender: "bob@s.whatsapp.net",
+        senderName: "Bob",
+        conversationId: "bob@s.whatsapp.net",
+        isGroup: false,
+        content: "Goodbye world",
+        timestamp: 2000,
+      });
+
+      const results = db.searchFts({ query: "Hello" });
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results[0].content).toBe("Hello world this is a test");
+    });
+
+    it("searchFts filters by account", () => {
+      db.insertMessage({
+        messageId: "fa1", accountId: "main", sender: "s1", conversationId: "c1",
+        isGroup: false, content: "searchable text", timestamp: 1000,
+      });
+      db.insertMessage({
+        messageId: "fa2", accountId: "other", sender: "s1", conversationId: "c1",
+        isGroup: false, content: "searchable text", timestamp: 2000,
+      });
+
+      const results = db.searchFts({ query: "searchable", accountId: "main" });
+      expect(results).toHaveLength(1);
+      expect(results[0].account_id).toBe("main");
+    });
+  });
+
+  describe("getOldestMessage", () => {
+    it("returns the oldest message for a conversation", () => {
+      db.insertMessage({ messageId: "o1", accountId: "main", sender: "s", conversationId: "c@s.whatsapp.net", isGroup: false, content: "old", timestamp: 1000 });
+      db.insertMessage({ messageId: "o2", accountId: "main", sender: "s", conversationId: "c@s.whatsapp.net", isGroup: false, content: "new", timestamp: 2000 });
+
+      const oldest = db.getOldestMessage("c@s.whatsapp.net");
+      expect(oldest?.content).toBe("old");
+      expect(oldest?.timestamp).toBe(1000);
+    });
+
+    it("returns undefined for empty conversation", () => {
+      expect(db.getOldestMessage("nonexistent@s.whatsapp.net")).toBeUndefined();
+    });
+  });
+
   describe("getHistory", () => {
     it("returns messages in chronological order", () => {
       const convId = "conv@s.whatsapp.net";

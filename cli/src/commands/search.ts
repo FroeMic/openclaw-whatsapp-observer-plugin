@@ -41,7 +41,7 @@ export default class Search extends Command {
     const config = readObserverConfig();
 
     try {
-      const results = db.search({
+      const results = db.searchFts({
         query: args.query,
         sender: flags.sender,
         group: flags.group,
