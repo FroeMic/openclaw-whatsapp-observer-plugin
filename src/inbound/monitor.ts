@@ -49,6 +49,7 @@ export async function monitorWebInbox(options: {
 }) {
   const inboundLogger = getChildLogger({ module: "web-inbound" });
   const inboundConsoleLog = createSubsystemLogger("gateway/channels/whatsapp-pro").child("inbound");
+  inboundConsoleLog.info(`[${options.accountId}] monitorWebInbox started (observerTap=${!!options.observerTap})`);
   const sock = await createWaSocket(false, options.verbose, {
     authDir: options.authDir,
   });

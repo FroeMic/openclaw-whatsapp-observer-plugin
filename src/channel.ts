@@ -329,7 +329,8 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
           // Normal mode — identical to upstream, with observer DB tap
           const { e164, jid } = (await loadWhatsAppChannelRuntime()).readWebSelfId(account.authDir);
           const identity = e164 ? e164 : jid ? `jid ${jid}` : "unknown";
-          ctx.log?.info(`[${account.accountId}] starting provider (${identity})`);
+          const hasObserverTap = !!(observerDb && observerConfig);
+          ctx.log?.info(`[${account.accountId}] starting provider (${identity}), observerTap=${hasObserverTap}`);
           return (await loadWhatsAppChannelRuntime()).monitorWebChannel(
             getWhatsAppRuntime().logging.shouldLogVerbose(),
             undefined,
