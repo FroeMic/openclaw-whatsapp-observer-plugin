@@ -115,24 +115,37 @@ export async function processObserverMessage(
     db: ObserverDB;
     logger?: ChannelLogSink;
     source?: MessageSource;
+    /** LID→E.164 lookup from Baileys signal repository (for resolving LID JIDs). */
+    lidLookup?: unknown;
+    /** Auth dir for JID resolution fallback. */
+    authDir?: string;
   },
 ): Promise<void> {
   // Resolve JID: prefer remoteJidAlt (E.164-based) when remoteJid uses LID format
   const rawJid = msg.key?.remoteJid;
   const altJid = (msg.key as Record<string, unknown>)?.remoteJidAlt as string | undefined;
-  const participantAlt = (msg.key as Record<string, unknown>)?.participantAlt as string | undefined;
 
-  // Log JID resolution for debugging
-  if (rawJid?.endsWith("@lid")) {
-    ctx.logger?.info(
-      `Observer ${ctx.accountId}: LID detected rawJid=${rawJid} altJid=${altJid ?? "none"} participantAlt=${participantAlt ?? "none"} keys=${Object.keys(msg.key ?? {}).join(",")}`,
-    );
-  }
-
-  const remoteJid = altJid && (altJid.endsWith("@s.whatsapp.net") || altJid.endsWith("@g.us"))
+  let remoteJid = altJid && (altJid.endsWith("@s.whatsapp.net") || altJid.endsWith("@g.us"))
     ? altJid
     : rawJid;
   if (!remoteJid) return;
+
+  // Resolve LID JIDs to E.164 using the signal repository's lid mapping
+  if (remoteJid.endsWith("@lid") && (ctx.lidLookup || ctx.authDir)) {
+    try {
+      const { resolveJidToE164 } = await import("openclaw/plugin-sdk/text-runtime");
+      const resolved = await resolveJidToE164(remoteJid, {
+        authDir: ctx.authDir,
+        lidLookup: ctx.lidLookup,
+      });
+      if (resolved) {
+        remoteJid = resolved.includes("@") ? resolved : `${resolved}@s.whatsapp.net`;
+      }
+    } catch {
+      // SDK not available (e.g., in tests) — fall back to raw JID
+    }
+  }
+
   if (
     !remoteJid.endsWith("@s.whatsapp.net") &&
     !remoteJid.endsWith("@g.us") &&
@@ -143,7 +156,20 @@ export async function processObserverMessage(
 
   const isGroup = isJidGroup(remoteJid);
   const sender = isGroup ? (msg.key?.participant ?? remoteJid) : remoteJid;
-  const senderE164 = jidToE164(sender) ?? jidToE164(altJid);
+  let senderE164 = jidToE164(sender) ?? jidToE164(altJid);
+
+  // Resolve sender LID if still unresolved
+  if (!senderE164 && sender.endsWith("@lid") && (ctx.lidLookup || ctx.authDir)) {
+    try {
+      const { resolveJidToE164 } = await import("openclaw/plugin-sdk/text-runtime");
+      senderE164 = await resolveJidToE164(sender, {
+        authDir: ctx.authDir,
+        lidLookup: ctx.lidLookup,
+      }) ?? undefined;
+    } catch {
+      // SDK not available — keep senderE164 as-is
+    }
+  }
 
   // Apply blocklist/allowlist at ingestion time only in record-filtered mode
   if (ctx.config.mode === "record-filtered-retrieve-filtered") {

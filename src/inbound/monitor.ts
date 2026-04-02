@@ -416,11 +416,13 @@ export async function monitorWebInbox(options: {
       if (options.observerTap) {
         try {
           inboundConsoleLog.info(`[${options.accountId}] observer tap: processing msg type=${upsert.type} remoteJid=${msg.key?.remoteJid}`);
-          await processObserverMessage(msg, null, {
+          await processObserverMessage(msg, sock, {
             accountId: options.accountId,
             config: options.observerTap.config,
             db: options.observerTap.db,
             source: "pipeline",
+            lidLookup: sock.signalRepository?.lidMapping,
+            authDir: options.authDir,
           });
           inboundConsoleLog.info(`[${options.accountId}] observer tap: OK`);
         } catch (tapErr) {
