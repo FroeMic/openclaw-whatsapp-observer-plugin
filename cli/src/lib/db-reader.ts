@@ -35,7 +35,10 @@ export async function openDb(dbPath: string): Promise<ObserverDB> {
         "You can specify a different path with --db or WA_PRO_DB env var.",
     );
   }
-  return ObserverDB.create(dbPath);
+  const db = await ObserverDB.create(dbPath);
+  // Ensure legacy unscoped keys are migrated to global.* prefix
+  db.migrateToScopedKeys();
+  return db;
 }
 
 function resolveHomePath(p: string): string {
