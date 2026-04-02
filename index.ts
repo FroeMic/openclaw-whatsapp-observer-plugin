@@ -9,8 +9,7 @@ export { whatsappPlugin } from "./src/channel.js";
 export { setWhatsAppRuntime } from "./src/runtime.js";
 
 let observerDb: ObserverDB | null = null;
-let registerCallCount = 0;
-let dbInstanceId = 0;
+let dbInitPromise: Promise<ObserverDB> | null = null;
 
 export default definePluginEntry({
   id: "whatsapp-pro",
@@ -18,10 +17,6 @@ export default definePluginEntry({
   description: "WhatsApp channel plugin with observer mode for passive message logging",
 
   register(api) {
-    registerCallCount++;
-    const thisRegisterCall = registerCallCount;
-    api.logger.warn(`[whatsapp-pro] register() called (call #${thisRegisterCall})`);
-
     // Set up runtime and register channel (same as defineChannelPluginEntry)
     setWhatsAppRuntime(api.runtime);
     api.registerChannel({ plugin: whatsappPlugin });
@@ -32,52 +27,36 @@ export default definePluginEntry({
     const mediaPath = api.resolvePath(config.mediaPath);
     const resolvedConfig = { ...config, dbPath, mediaPath };
 
-    // Start async DB creation + seed settings from config if needed
-    ObserverDB.create(dbPath).then((db) => {
-      dbInstanceId++;
-      const thisDbId = dbInstanceId;
-      const prevDb = observerDb;
-      observerDb = db;
+    // Create DB only once — register() may be called multiple times by openclaw
+    if (!dbInitPromise) {
+      dbInitPromise = ObserverDB.create(dbPath);
+      dbInitPromise.then((db) => {
+        observerDb = db;
 
-      api.logger.warn(`[whatsapp-pro] DB instance #${thisDbId} created (register call #${thisRegisterCall}, replaced instance: ${prevDb ? 'yes' : 'no'})`);
+        // Seed DB settings from openclaw.json on first run (migration)
+        db.seedSettings({
+          mode: config.mode,
+          filters: config.filters,
+          retentionDays: config.retentionDays,
+        });
 
-      // Seed DB settings from openclaw.json on first run (migration)
-      db.seedSettings({
-        mode: config.mode,
-        filters: config.filters,
-        retentionDays: config.retentionDays,
+        // Use DB settings as source of truth (not openclaw.json)
+        const dbSettings = db.getObserverSettings();
+        const liveConfig = { ...resolvedConfig, ...dbSettings };
+        setObserverState(db, liveConfig);
+        api.logger.info(`[whatsapp-pro] Observer DB ready (mode: ${dbSettings.mode})`);
+      }).catch((err) => {
+        api.logger.error(`[whatsapp-pro] Observer DB init failed: ${String(err)}`);
       });
-
-      // Use DB settings as source of truth (not openclaw.json)
-      const dbSettings = db.getObserverSettings();
-      const liveConfig = { ...resolvedConfig, ...dbSettings };
-      setObserverState(db, liveConfig);
-      api.logger.info(`[whatsapp-pro] Observer DB ready (mode: ${dbSettings.mode})`);
-    }).catch((err) => {
-      api.logger.error(`[whatsapp-pro] Observer DB init failed: ${String(err)}`);
-    });
+    }
 
     // Log normal-path messages to the same DB
     api.on("message_received", (event, ctx) => {
-      if (!ctx) return;
-      if (!observerDb) {
-        api.logger.warn(`[whatsapp-pro] message_received: DB not ready (register #${thisRegisterCall})`);
-        return;
-      }
+      if (!ctx || !observerDb) return;
       const hookCtx = ctx as Record<string, unknown>;
-      if (hookCtx.channelId !== "whatsapp-pro") {
-        api.logger.debug(`[whatsapp-pro] message_received: ignoring channelId=${String(hookCtx.channelId)} (register #${thisRegisterCall})`);
-        return;
-      }
+      if (hookCtx.channelId !== "whatsapp-pro") return;
       const hookEvent = event as Record<string, unknown>;
       const metadata = (hookEvent.metadata ?? {}) as Record<string, unknown>;
-
-      const msgId = (metadata.messageId as string) ?? "null";
-      const from = String(hookEvent.from);
-      const account = String(hookCtx.accountId);
-      const content = String(hookEvent.content ?? "").slice(0, 30);
-
-      api.logger.warn(`[whatsapp-pro] HOOK message_received: register=#${thisRegisterCall} dbInstance=#${dbInstanceId} from=${from} account=${account} msgId=${msgId} content="${content}"`);
 
       try {
         observerDb.insertMessage({
@@ -94,12 +73,8 @@ export default definePluginEntry({
           messageType: "message",
           source: "pipeline",
         });
-
-        // Verify: query back immediately to confirm it was inserted
-        const count = observerDb.getStats({ accountId: account }).totalMessages;
-        api.logger.warn(`[whatsapp-pro] INSERT OK: account=${account} totalMessages=${count}`);
       } catch (err) {
-        api.logger.error(`[whatsapp-pro] INSERT FAILED: ${String(err)}`);
+        api.logger.error(`[whatsapp-pro] Failed to log pipeline message: ${String(err)}`);
       }
     });
 
@@ -125,19 +100,10 @@ export default definePluginEntry({
 
     // Log outbound messages (agent replies, manual sends) to the same DB
     api.on("message_sent", (event, ctx) => {
-      if (!ctx) return;
-      if (!observerDb) {
-        api.logger.warn(`[whatsapp-pro] message_sent: DB not ready (register #${thisRegisterCall})`);
-        return;
-      }
+      if (!ctx || !observerDb) return;
       const hookCtx = ctx as Record<string, unknown>;
-      if (hookCtx.channelId !== "whatsapp-pro") {
-        api.logger.debug(`[whatsapp-pro] message_sent: ignoring channelId=${String(hookCtx.channelId)} (register #${thisRegisterCall})`);
-        return;
-      }
+      if (hookCtx.channelId !== "whatsapp-pro") return;
       const hookEvent = event as Record<string, unknown>;
-
-      api.logger.warn(`[whatsapp-pro] HOOK message_sent: register=#${thisRegisterCall} dbInstance=#${dbInstanceId} to=${String(hookEvent.to)} account=${String(hookCtx.accountId)}`);
 
       try {
         observerDb.insertMessage({
@@ -152,11 +118,8 @@ export default definePluginEntry({
           messageType: "message",
           source: "pipeline",
         });
-
-        const count = observerDb.getStats({ accountId: (hookCtx.accountId as string) ?? "unknown" }).totalMessages;
-        api.logger.warn(`[whatsapp-pro] INSERT OK (outbound): totalMessages=${count}`);
       } catch (err) {
-        api.logger.error(`[whatsapp-pro] INSERT FAILED (outbound): ${String(err)}`);
+        api.logger.error(`[whatsapp-pro] Failed to log outbound message: ${String(err)}`);
       }
     });
 
