@@ -70,6 +70,10 @@ export async function monitorWebChannel(
   runtime: RuntimeEnv = defaultRuntime,
   abortSignal?: AbortSignal,
   tuning: WebMonitorTuning = {},
+  observerTap?: {
+    db: import("../observer/db.js").ObserverDB;
+    config: import("../observer/types.js").ObserverConfig;
+  },
 ) {
   const runId = newConnectionId();
   const replyLogger = getChildLogger({ module: "web-auto-reply", runId });
@@ -203,6 +207,7 @@ export async function monitorWebChannel(
       sendReadReceipts: account.sendReadReceipts,
       debounceMs: inboundDebounceMs,
       shouldDebounce,
+      observerTap,
       onMessage: async (msg: WebInboundMsg) => {
         active.handledMessages += 1;
         active.lastInboundAt = Date.now();

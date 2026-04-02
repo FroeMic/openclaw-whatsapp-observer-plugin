@@ -7,6 +7,7 @@ import { logVerbose, shouldLogVerbose } from "openclaw/plugin-sdk/runtime-env";
 import { createSubsystemLogger } from "openclaw/plugin-sdk/runtime-env";
 import { getChildLogger } from "openclaw/plugin-sdk/text-runtime";
 import { jidToE164, resolveJidToE164 } from "openclaw/plugin-sdk/text-runtime";
+import { processObserverMessage } from "../observer/monitor.js";
 import { createWaSocket, getStatusCode, waitForWaConnection } from "../session.js";
 import { checkInboundAccessControl } from "./access-control.js";
 import { isRecentInboundMessage } from "./dedupe.js";
@@ -40,6 +41,11 @@ export async function monitorWebInbox(options: {
   debounceMs?: number;
   /** Optional debounce gating predicate. */
   shouldDebounce?: (msg: WebInboundMessage) => boolean;
+  /** Observer DB + config for passive message logging (optional). */
+  observerTap?: {
+    db: import("../observer/db.js").ObserverDB;
+    config: import("../observer/types.js").ObserverConfig;
+  };
 }) {
   const inboundLogger = getChildLogger({ module: "web-inbound" });
   const inboundConsoleLog = createSubsystemLogger("gateway/channels/whatsapp-pro").child("inbound");
@@ -405,6 +411,20 @@ export async function monitorWebInbox(options: {
       return;
     }
     for (const msg of upsert.messages ?? []) {
+      // Observer DB tap — log every Baileys message regardless of pipeline outcome
+      if (options.observerTap) {
+        try {
+          await processObserverMessage(msg, null, {
+            accountId: options.accountId,
+            config: options.observerTap.config,
+            db: options.observerTap.db,
+            source: "pipeline",
+          });
+        } catch {
+          // best-effort — don't block the agent pipeline
+        }
+      }
+
       recordChannelActivity({
         channel: "whatsapp-pro",
         accountId: options.accountId,

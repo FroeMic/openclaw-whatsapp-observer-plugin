@@ -11,7 +11,7 @@ import { extractMessageContent, getContentType, normalizeMessageContent } from "
 import { isBlocked, isAllowed } from "./filter.js";
 import { hasMedia, detectMediaType, downloadAndStoreMedia } from "./media.js";
 import type { ObserverDB } from "./db.js";
-import type { ObserverConfig, ChannelLogSink } from "./types.js";
+import type { ObserverConfig, ChannelLogSink, MessageSource } from "./types.js";
 
 export type ObserverMonitorParams = {
   accountId: string;
@@ -106,14 +106,15 @@ function waitForCloseOrAbort(
   });
 }
 
-async function processObserverMessage(
+export async function processObserverMessage(
   msg: WAMessage,
-  sock: ReturnType<typeof makeWASocket>,
+  sock: ReturnType<typeof makeWASocket> | null,
   ctx: {
     accountId: string;
     config: ObserverConfig;
     db: ObserverDB;
     logger?: ChannelLogSink;
+    source?: MessageSource;
   },
 ): Promise<void> {
   // Resolve JID: prefer remoteJidAlt (E.164-based) when remoteJid uses LID format
@@ -165,7 +166,7 @@ async function processObserverMessage(
       content: reactionMsg.text || "[reaction removed]",
       refMessageId: reactionMsg.key?.id ?? undefined,
       messageType: "reaction",
-      source: "observer",
+      source: ctx.source ?? "observer",
       timestamp,
     });
     ctx.logger?.debug?.(`Observer ${ctx.accountId}: logged reaction from ${senderE164 ?? sender}`);
@@ -186,7 +187,7 @@ async function processObserverMessage(
       isGroup,
       content: `[poll] ${pollMsg.name ?? "Poll"}: ${options}`,
       messageType: "poll",
-      source: "observer",
+      source: ctx.source ?? "observer",
       timestamp,
     });
     ctx.logger?.debug?.(`Observer ${ctx.accountId}: logged poll from ${senderE164 ?? sender}`);
@@ -212,7 +213,7 @@ async function processObserverMessage(
         content: editedText ?? "[edited message]",
         refMessageId: protoMsg.key?.id ?? undefined,
         messageType: "edit",
-        source: "observer",
+        source: ctx.source ?? "observer",
         timestamp,
       });
       ctx.logger?.debug?.(`Observer ${ctx.accountId}: logged edit from ${senderE164 ?? sender}`);
@@ -231,7 +232,7 @@ async function processObserverMessage(
         content: "[message deleted]",
         refMessageId: protoMsg.key.id ?? undefined,
         messageType: "delete",
-        source: "observer",
+        source: ctx.source ?? "observer",
         timestamp,
       });
       ctx.logger?.debug?.(`Observer ${ctx.accountId}: logged deletion from ${senderE164 ?? sender}`);
@@ -246,7 +247,7 @@ async function processObserverMessage(
   const text = extractText(msg.message as import("@whiskeysockets/baileys").proto.IMessage | undefined);
 
   let groupName: string | undefined;
-  if (isGroup) {
+  if (isGroup && sock) {
     try {
       const meta = await sock.groupMetadata(remoteJid);
       groupName = meta?.subject;
@@ -255,10 +256,10 @@ async function processObserverMessage(
     }
   }
 
-  // Download media if present
+  // Download media if present (requires sock for download)
   let mediaLocalPath: string | undefined;
   let mediaMime: string | undefined;
-  if (hasMedia(msg.message as import("@whiskeysockets/baileys").proto.IMessage | undefined)) {
+  if (sock && hasMedia(msg.message as import("@whiskeysockets/baileys").proto.IMessage | undefined)) {
     const result = await downloadAndStoreMedia(msg, sock, ctx.config.mediaPath);
     if (result) {
       mediaLocalPath = result.localPath;
@@ -282,7 +283,7 @@ async function processObserverMessage(
     mediaPath: mediaLocalPath,
     mediaMime,
     messageType: "message",
-    source: "observer",
+    source: ctx.source ?? "observer",
     timestamp,
   });
 

@@ -22,10 +22,10 @@ describe("Observer Monitor", () => {
       expect(sendRelated).toEqual([]);
     });
 
-    it("exports only startObserverMonitor", async () => {
+    it("exports only expected functions", async () => {
       const monitorModule = await import("../src/observer/monitor.js");
-      const exportedNames = Object.keys(monitorModule);
-      expect(exportedNames).toEqual(["startObserverMonitor"]);
+      const exportedNames = Object.keys(monitorModule).sort();
+      expect(exportedNames).toEqual(["processObserverMessage", "startObserverMonitor"]);
     });
   });
 });

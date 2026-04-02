@@ -326,7 +326,7 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
             });
           }
 
-          // Normal mode — identical to upstream
+          // Normal mode — identical to upstream, with observer DB tap
           const { e164, jid } = (await loadWhatsAppChannelRuntime()).readWebSelfId(account.authDir);
           const identity = e164 ? e164 : jid ? `jid ${jid}` : "unknown";
           ctx.log?.info(`[${account.accountId}] starting provider (${identity})`);
@@ -342,6 +342,8 @@ export const whatsappPlugin: ChannelPlugin<ResolvedWhatsAppAccount> =
                 ctx.setStatus({ accountId: ctx.accountId, ...next }),
               accountId: account.accountId,
             },
+            // Pass observer DB so normal accounts also log to the observer DB
+            observerDb && observerConfig ? { db: observerDb, config: observerConfig } : undefined,
           );
         },
         loginWithQrStart: async ({ accountId, force, timeoutMs, verbose }) =>

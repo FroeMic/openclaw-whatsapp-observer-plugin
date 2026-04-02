@@ -10,7 +10,6 @@ export { setWhatsAppRuntime } from "./src/runtime.js";
 
 let observerDb: ObserverDB | null = null;
 let dbInitPromise: Promise<ObserverDB> | null = null;
-let registerCallCount = 0;
 
 export default definePluginEntry({
   id: "whatsapp-pro",
@@ -18,14 +17,11 @@ export default definePluginEntry({
   description: "WhatsApp channel plugin with observer mode for passive message logging",
 
   register(api) {
-    registerCallCount++;
-    api.logger.info(`[whatsapp-pro] register() call #${registerCallCount} (dbInitStarted: ${!!dbInitPromise})`);
-
     // Set up runtime and register channel (same as defineChannelPluginEntry)
     setWhatsAppRuntime(api.runtime);
     api.registerChannel({ plugin: whatsappPlugin });
 
-    // Observer setup — DB init + hooks (CLI provides query interface via wa-pro skill)
+    // Observer setup — DB init (message logging happens at Baileys level, not via hooks)
     const config = parseObserverConfig(getChannelConfig(api.config));
     const dbPath = api.resolvePath(config.dbPath);
     const mediaPath = api.resolvePath(config.mediaPath);
@@ -54,45 +50,6 @@ export default definePluginEntry({
       });
     }
 
-    // Log normal-path messages to the same DB
-    const thisRegister = registerCallCount;
-    api.on("message_received", (event, ctx) => {
-      if (!ctx) return;
-      if (!observerDb) {
-        api.logger.warn(`[whatsapp-pro] message_received: DB not ready (register #${thisRegister})`);
-        return;
-      }
-      const hookCtx = ctx as Record<string, unknown>;
-      if (hookCtx.channelId !== "whatsapp-pro") return;
-      const hookEvent = event as Record<string, unknown>;
-      const metadata = (hookEvent.metadata ?? {}) as Record<string, unknown>;
-
-      const account = String(hookCtx.accountId ?? "unknown");
-      const content = String(hookEvent.content ?? "").slice(0, 30);
-      api.logger.info(`[whatsapp-pro] HOOK message_received: register=#${thisRegister} account=${account} content="${content}"`);
-
-      try {
-        observerDb.insertMessage({
-          messageId: (metadata.messageId as string) ?? undefined,
-          accountId: (hookCtx.accountId as string) ?? "unknown",
-          sender: hookEvent.from as string,
-          senderName: (metadata.senderName as string) ?? undefined,
-          senderE164: (metadata.senderE164 as string) ?? undefined,
-          conversationId: (hookCtx.conversationId as string) ?? (hookEvent.from as string),
-          isGroup: Boolean(metadata.isGroup),
-          groupName: (metadata.groupSubject as string) ?? undefined,
-          content: hookEvent.content as string,
-          timestamp: (hookEvent.timestamp as number) ?? Date.now(),
-          messageType: "message",
-          source: "pipeline",
-        });
-        const count = observerDb.getStats({ accountId: account }).totalMessages;
-        api.logger.info(`[whatsapp-pro] INSERT OK: account=${account} total=${count}`);
-      } catch (err) {
-        api.logger.error(`[whatsapp-pro] INSERT FAILED: ${String(err)}`);
-      }
-    });
-
     // Safety layer: block outbound on observer accounts
     api.on(
       "message_sending",
@@ -112,39 +69,6 @@ export default definePluginEntry({
       },
       { priority: 9999 },
     );
-
-    // Log outbound messages (agent replies, manual sends) to the same DB
-    api.on("message_sent", (event, ctx) => {
-      if (!ctx) return;
-      if (!observerDb) {
-        api.logger.warn(`[whatsapp-pro] message_sent: DB not ready (register #${thisRegister})`);
-        return;
-      }
-      const hookCtx = ctx as Record<string, unknown>;
-      if (hookCtx.channelId !== "whatsapp-pro") return;
-      const hookEvent = event as Record<string, unknown>;
-
-      api.logger.info(`[whatsapp-pro] HOOK message_sent: register=#${thisRegister} to=${String(hookEvent.to)} account=${String(hookCtx.accountId)}`);
-
-      try {
-        observerDb.insertMessage({
-          messageId: (hookEvent.messageId as string) ?? undefined,
-          accountId: (hookCtx.accountId as string) ?? "unknown",
-          sender: (hookEvent.to as string) ?? "self",
-          senderName: "self",
-          conversationId: (hookCtx.conversationId as string) ?? (hookEvent.to as string),
-          isGroup: Boolean(hookEvent.isGroup),
-          content: hookEvent.content as string,
-          timestamp: (hookEvent.timestamp as number) ?? Date.now(),
-          messageType: "message",
-          source: "pipeline",
-        });
-        const count = observerDb.getStats({ accountId: (hookCtx.accountId as string) ?? "unknown" }).totalMessages;
-        api.logger.info(`[whatsapp-pro] INSERT OK (outbound): account=${String(hookCtx.accountId)} total=${count}`);
-      } catch (err) {
-        api.logger.error(`[whatsapp-pro] INSERT FAILED (outbound): ${String(err)}`);
-      }
-    });
 
     api.logger.info(
       `[whatsapp-pro] Observer mode initialized (db: ${dbPath}, media: ${mediaPath})`,
