@@ -186,6 +186,24 @@ OPENCLAW_ROOT="$(dirname "$(readlink -f "$(which openclaw)")")"
 mkdir -p "$EXTENSION_DIR/node_modules"
 ln -sf "$OPENCLAW_ROOT" "$EXTENSION_DIR/node_modules/openclaw"
 
+# --- Ensure built-in whatsapp is fully disabled ---
+# The gateway auto-enables built-in whatsapp when it detects credentials.
+# Explicitly disable the plugin AND remove the channel config to prevent this.
+echo "Ensuring built-in whatsapp is disabled..."
+openclaw plugins disable whatsapp 2>/dev/null || true
+openclaw config unset channels.whatsapp 2>/dev/null || true
+# Also clean up the stale plugins.entries.whatsapp left by 'plugins disable'
+node -e "
+  const fs = require('fs');
+  const configPath = '$CONFIG_PATH';
+  if (!fs.existsSync(configPath)) process.exit(0);
+  const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  if (cfg.plugins?.entries?.whatsapp) {
+    delete cfg.plugins.entries.whatsapp;
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
+  }
+" 2>/dev/null || true
+
 # --- Save meta (after plugin is installed so openclaw knows the channel ID) ---
 node -e "
   const fs = require('fs');
