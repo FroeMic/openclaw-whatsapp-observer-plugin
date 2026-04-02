@@ -121,12 +121,15 @@ export async function processObserverMessage(
     authDir?: string;
   },
 ): Promise<void> {
+  // Strip leading '+' from JIDs — WhatsApp JIDs use digits only before the @
+  const normalizeJid = (jid: string): string => jid.replace(/^\+/, "");
+
   // Resolve JID: prefer remoteJidAlt (E.164-based) when remoteJid uses LID format
   const rawJid = msg.key?.remoteJid;
   const altJid = (msg.key as Record<string, unknown>)?.remoteJidAlt as string | undefined;
 
   let remoteJid = altJid && (altJid.endsWith("@s.whatsapp.net") || altJid.endsWith("@g.us"))
-    ? altJid
+    ? normalizeJid(altJid)
     : rawJid;
   if (!remoteJid) return;
 
@@ -139,7 +142,8 @@ export async function processObserverMessage(
         lidLookup: ctx.lidLookup,
       });
       if (resolved) {
-        remoteJid = resolved.includes("@") ? resolved : `${resolved}@s.whatsapp.net`;
+        const normalized = normalizeJid(resolved);
+        remoteJid = normalized.includes("@") ? normalized : `${normalized}@s.whatsapp.net`;
       }
     } catch {
       // SDK not available (e.g., in tests) — fall back to raw JID
