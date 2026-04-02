@@ -26,11 +26,22 @@ export default definePluginEntry({
     const mediaPath = api.resolvePath(config.mediaPath);
     const resolvedConfig = { ...config, dbPath, mediaPath };
 
-    // Start async DB creation
+    // Start async DB creation + seed settings from config if needed
     ObserverDB.create(dbPath).then((db) => {
       observerDb = db;
-      setObserverState(db, resolvedConfig);
-      api.logger.info(`[whatsapp-pro] Observer DB ready (mode: ${config.mode})`);
+
+      // Seed DB settings from openclaw.json on first run (migration)
+      db.seedSettings({
+        mode: config.mode,
+        filters: config.filters,
+        retentionDays: config.retentionDays,
+      });
+
+      // Use DB settings as source of truth (not openclaw.json)
+      const dbSettings = db.getObserverSettings();
+      const liveConfig = { ...resolvedConfig, ...dbSettings };
+      setObserverState(db, liveConfig);
+      api.logger.info(`[whatsapp-pro] Observer DB ready (mode: ${dbSettings.mode})`);
     }).catch((err) => {
       api.logger.error(`[whatsapp-pro] Observer DB init failed: ${String(err)}`);
     });

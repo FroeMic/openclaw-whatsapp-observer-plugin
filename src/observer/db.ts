@@ -3,10 +3,14 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
   ConversationSummary,
+  ObserverFilters,
   ObserverMessage,
+  ObserverMode,
+  ObserverSettings,
   ObserverStats,
   StatsGroupByResult,
 } from "./types.js";
+import { DEFAULT_OBSERVER_MODE, OBSERVER_MODES } from "./types.js";
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS messages (
@@ -37,6 +41,11 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id);
 CREATE INDEX IF NOT EXISTS idx_messages_content ON messages(content);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 
 const MIGRATION_COLUMNS = [
@@ -113,6 +122,70 @@ export class ObserverDB {
       }
     }
   }
+
+  // ── Settings ──────────────────────────────────────────────────────
+
+  getSetting(key: string): string | undefined {
+    const rows = this.query("SELECT value FROM settings WHERE key = :key", { ":key": key });
+    return rows.length > 0 ? String(rows[0].value) : undefined;
+  }
+
+  setSetting(key: string, value: string): void {
+    this.db.run(
+      "INSERT OR REPLACE INTO settings (key, value) VALUES (:key, :value)",
+      { ":key": key, ":value": value },
+    );
+    this.scheduleSave();
+  }
+
+  deleteSetting(key: string): void {
+    this.db.run("DELETE FROM settings WHERE key = :key", { ":key": key });
+    this.scheduleSave();
+  }
+
+  getObserverSettings(): ObserverSettings {
+    const rawMode = this.getSetting("mode");
+    const mode: ObserverMode =
+      rawMode && (OBSERVER_MODES as readonly string[]).includes(rawMode)
+        ? (rawMode as ObserverMode)
+        : DEFAULT_OBSERVER_MODE;
+
+    let blocklist: string[] = [];
+    try {
+      const raw = this.getSetting("filters.blocklist");
+      if (raw) blocklist = JSON.parse(raw) as string[];
+    } catch { /* invalid JSON, use default */ }
+
+    let allowlist: string[] = ["*"];
+    try {
+      const raw = this.getSetting("filters.allowlist");
+      if (raw) allowlist = JSON.parse(raw) as string[];
+    } catch { /* invalid JSON, use default */ }
+
+    const rawRetention = this.getSetting("retentionDays");
+    const retentionDays = rawRetention ? Number(rawRetention) : 90;
+
+    return {
+      mode,
+      filters: { blocklist, allowlist },
+      retentionDays: Number.isFinite(retentionDays) ? retentionDays : 90,
+    };
+  }
+
+  hasSettings(): boolean {
+    const rows = this.query("SELECT COUNT(*) AS count FROM settings");
+    return (rows[0]?.count as number) > 0;
+  }
+
+  seedSettings(settings: ObserverSettings): void {
+    if (this.hasSettings()) return;
+    this.setSetting("mode", settings.mode);
+    this.setSetting("filters.blocklist", JSON.stringify(settings.filters.blocklist));
+    this.setSetting("filters.allowlist", JSON.stringify(settings.filters.allowlist));
+    this.setSetting("retentionDays", String(settings.retentionDays));
+  }
+
+  // ── Persistence ──────────────────────────────────────────────────
 
   private scheduleSave(): void {
     if (!this.dbPath || this.saveTimer) return;

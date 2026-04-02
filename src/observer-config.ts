@@ -1,10 +1,16 @@
 import type { WhatsAppProChannelConfig } from "./channel-config.js";
-import { DEFAULT_OBSERVER_MODE, OBSERVER_MODES, type ObserverConfig, type ObserverMode } from "./observer/types.js";
+import { DEFAULT_OBSERVER_MODE, OBSERVER_MODES, type ObserverConfig, type ObserverMode, type ObserverSettings } from "./observer/types.js";
 
 const DEFAULT_DB_PATH = "~/.openclaw/whatsapp-observer/messages.db";
 const DEFAULT_MEDIA_PATH = "~/.openclaw/whatsapp-observer/media";
-const DEFAULT_RETENTION_DAYS = 90;
 
+/**
+ * Parse observer config from openclaw.json.
+ *
+ * Paths and observer account list come from openclaw.json.
+ * Mode/filters/retention are also parsed here for migration seeding,
+ * but at runtime the DB's settings table is the source of truth.
+ */
 export function parseObserverConfig(
   channelConfig: WhatsAppProChannelConfig | undefined,
 ): ObserverConfig {
@@ -12,23 +18,38 @@ export function parseObserverConfig(
 
   const dbPath = typeof raw?.dbPath === "string" ? raw.dbPath : DEFAULT_DB_PATH;
   const mediaPath = typeof raw?.mediaPath === "string" ? raw.mediaPath : DEFAULT_MEDIA_PATH;
-  const retentionDays =
-    typeof raw?.retentionDays === "number" ? raw.retentionDays : DEFAULT_RETENTION_DAYS;
 
+  // Observer account IDs
+  const observerAccounts = Array.isArray(raw?.accounts) ? raw.accounts : [];
+
+  // Settings (used for migration seeding — at runtime, DB is source of truth)
+  const settings = parseObserverSettingsFromConfig(raw);
+
+  return { dbPath, mediaPath, observerAccounts, ...settings };
+}
+
+/**
+ * Parse settings fields from the openclaw.json observer block.
+ * Used to seed the DB on first run (migration from config to DB).
+ */
+export function parseObserverSettingsFromConfig(
+  raw: Record<string, unknown> | undefined,
+): ObserverSettings {
   const rawMode = typeof raw?.mode === "string" ? raw.mode : undefined;
   const mode: ObserverMode = rawMode && (OBSERVER_MODES as readonly string[]).includes(rawMode)
     ? (rawMode as ObserverMode)
     : DEFAULT_OBSERVER_MODE;
 
-  const blocklist = Array.isArray(raw?.filters?.blocklist) ? raw.filters.blocklist : [];
-  const allowlist = Array.isArray(raw?.filters?.allowlist) ? raw.filters.allowlist : ["*"];
+  const rawFilters = raw?.filters as Record<string, unknown> | undefined;
+  const blocklist = Array.isArray(rawFilters?.blocklist) ? rawFilters.blocklist as string[] : [];
+  const allowlist = Array.isArray(rawFilters?.allowlist) ? rawFilters.allowlist as string[] : ["*"];
 
-  // Observer account IDs stored in channels.whatsapp-pro.observer.accounts
-  const observerAccounts = Array.isArray(raw?.accounts) ? raw.accounts : [];
+  const retentionDays =
+    typeof raw?.retentionDays === "number" ? raw.retentionDays : 90;
 
-  return { dbPath, mediaPath, mode, filters: { blocklist, allowlist }, retentionDays, observerAccounts };
+  return { mode, filters: { blocklist, allowlist }, retentionDays };
 }
 
-export function isObserverAccount(accountId: string, config: ObserverConfig): boolean {
+export function isObserverAccount(accountId: string, config: { observerAccounts: string[] }): boolean {
   return config.observerAccounts.includes(accountId);
 }

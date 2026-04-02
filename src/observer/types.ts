@@ -11,14 +11,19 @@ export const OBSERVER_MODES: readonly ObserverMode[] = [
 
 export const DEFAULT_OBSERVER_MODE: ObserverMode = "record-all-retrieve-all";
 
-export type ObserverConfig = {
-  dbPath: string;
-  mediaPath: string;
+/** Settings stored in the observer DB (mutable at runtime via wa-pro CLI). */
+export type ObserverSettings = {
   mode: ObserverMode;
   filters: ObserverFilters;
   retentionDays: number;
-  observerAccounts: string[];
 };
+
+/** Full observer config: paths + accounts from openclaw.json, settings from DB. */
+export type ObserverConfig = {
+  dbPath: string;
+  mediaPath: string;
+  observerAccounts: string[];
+} & ObserverSettings;
 
 export type ObserverFilters = {
   blocklist: string[];
