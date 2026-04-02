@@ -415,14 +415,16 @@ export async function monitorWebInbox(options: {
       // Observer DB tap — log every Baileys message regardless of pipeline outcome
       if (options.observerTap) {
         try {
+          inboundConsoleLog.info(`[${options.accountId}] observer tap: processing msg type=${upsert.type} remoteJid=${msg.key?.remoteJid}`);
           await processObserverMessage(msg, null, {
             accountId: options.accountId,
             config: options.observerTap.config,
             db: options.observerTap.db,
             source: "pipeline",
           });
-        } catch {
-          // best-effort — don't block the agent pipeline
+          inboundConsoleLog.info(`[${options.accountId}] observer tap: OK`);
+        } catch (tapErr) {
+          inboundConsoleLog.error(`[${options.accountId}] observer tap FAILED: ${String(tapErr)}`);
         }
       }
 
