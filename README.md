@@ -11,6 +11,10 @@ A fully independent WhatsApp channel plugin for [OpenClaw](https://openclaw.ai) 
 - **Agent skill** — automatically teaches the OpenClaw agent about the CLI so it can query message history on demand via `exec`
 - **Per-account configuration** — recording mode, allowlist, blocklist, and retention are configurable per account with global defaults
 - **Three recording modes** — control what gets stored and what the agent/CLI can retrieve
+- **History sync** — automatically captures historical messages on connect via Baileys' full history sync
+- **On-demand backfill** — request older messages for specific conversations via `wa-pro backfill`
+- **Contact directory** — automatically collects contact names and group metadata from WhatsApp events
+- **FTS5 search** — full-text search index for fast queries on large message databases
 
 ## Prerequisites
 
@@ -22,7 +26,7 @@ A fully independent WhatsApp channel plugin for [OpenClaw](https://openclaw.ai) 
 
 ```bash
 # 1. Clone
-git clone https://github.com/FroeMic/openclaw-whatsapp-observer-plugin.git
+git clone https://github.com/FroeMic/wa-pro.git
 cd openclaw-whatsapp-observer-plugin
 
 # 2. Install (backs up config, disables built-in whatsapp, installs wa-pro CLI)
@@ -117,11 +121,26 @@ wa-pro conversations [--account <id>] [--limit <N>]
 wa-pro stats [--account <id>] [--after <date>] [--group-by sender|group|day|hour]
 ```
 
-### Account Commands
+### Backfill Commands
+
+```bash
+# Request older messages for a conversation (phone must be online)
+wa-pro backfill <conversation-jid> --account <id> [--count <N>] [--requests <N>] [--wait <seconds>]
+
+# Backfill all conversations for an account
+wa-pro conversations --account michael --format json | \
+  jq -r '.[].conversationId' | \
+  while read jid; do wa-pro backfill "$jid" --account michael --requests 3 --wait 10; done
+```
+
+### Account & Contact Commands
 
 ```bash
 # List all accounts with role, linked status, policies, and message counts
 wa-pro accounts [--format table]
+
+# List known contacts and groups
+wa-pro contacts [--account <id>] [--groups] [--people] [--format table]
 ```
 
 ### Observer Config Commands
@@ -215,7 +234,7 @@ openclaw-whatsapp-observer-plugin/
     observer-config.ts        # Observer config parsing
     observer/
       monitor.ts              # Baileys listener + message processing (all accounts)
-      db.ts                   # SQLite database (messages + scoped settings)
+      db.ts                   # SQLite database (messages + contacts + scoped settings + FTS5)
       filter.ts               # Allowlist/blocklist filtering
       types.ts                # Type definitions
     inbound/
@@ -226,7 +245,7 @@ openclaw-whatsapp-observer-plugin/
     src/
       commands/               # oclif commands
         search.ts, recent.ts, history.ts, conversations.ts, stats.ts
-        accounts.ts
+        accounts.ts, contacts.ts, backfill.ts
         config/               # show, mode, allowlist, blocklist, retention
       lib/                    # Shared utilities
   skills/
@@ -235,7 +254,7 @@ openclaw-whatsapp-observer-plugin/
     install.sh                # Install with config migration
     uninstall.sh              # Uninstall with config restoration
     setup.sh                  # Account setup (normal/observer)
-  test/                       # 63 Vitest tests
+  test/                       # 74 Vitest tests
 ```
 
 ### Message Flow
@@ -279,7 +298,7 @@ Observer accounts are prevented from sending messages at three layers:
 ## Development
 
 ```bash
-# Run all tests (63 tests across 4 suites)
+# Run all tests (74 tests across 4 suites)
 npx vitest run
 
 # Test CLI locally
@@ -292,6 +311,17 @@ cp -r . ~/.openclaw/extensions/whatsapp-pro/
 openclaw gateway restart
 ```
 
+## Reset Database
+
+To clear all messages, contacts, and settings and start fresh:
+
+```bash
+rm ~/.openclaw/whatsapp-observer/messages.db
+openclaw gateway restart
+```
+
+The DB is recreated automatically on gateway startup.
+
 ## License
 
-MIT
+MIT — see [LICENSE.md](./LICENSE.md).
