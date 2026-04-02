@@ -48,11 +48,20 @@ export default definePluginEntry({
 
     // Log normal-path messages to the same DB
     api.on("message_received", (event, ctx) => {
-      if (!ctx || !observerDb) return;
+      if (!ctx) return;
+      if (!observerDb) {
+        api.logger.warn(`[whatsapp-pro] message_received: DB not ready, skipping`);
+        return;
+      }
       const hookCtx = ctx as Record<string, unknown>;
-      if (hookCtx.channelId !== "whatsapp-pro") return;
+      if (hookCtx.channelId !== "whatsapp-pro") {
+        api.logger.debug(`[whatsapp-pro] message_received: ignoring channelId=${String(hookCtx.channelId)}`);
+        return;
+      }
       const hookEvent = event as Record<string, unknown>;
       const metadata = (hookEvent.metadata ?? {}) as Record<string, unknown>;
+
+      api.logger.info(`[whatsapp-pro] Pipeline logging: from=${String(hookEvent.from)} account=${String(hookCtx.accountId)}`);
 
       try {
         observerDb.insertMessage({
@@ -96,10 +105,19 @@ export default definePluginEntry({
 
     // Log outbound messages (agent replies, manual sends) to the same DB
     api.on("message_sent", (event, ctx) => {
-      if (!ctx || !observerDb) return;
+      if (!ctx) return;
+      if (!observerDb) {
+        api.logger.warn(`[whatsapp-pro] message_sent: DB not ready, skipping`);
+        return;
+      }
       const hookCtx = ctx as Record<string, unknown>;
-      if (hookCtx.channelId !== "whatsapp-pro") return;
+      if (hookCtx.channelId !== "whatsapp-pro") {
+        api.logger.debug(`[whatsapp-pro] message_sent: ignoring channelId=${String(hookCtx.channelId)}`);
+        return;
+      }
       const hookEvent = event as Record<string, unknown>;
+
+      api.logger.info(`[whatsapp-pro] Pipeline logging outbound: to=${String(hookEvent.to)} account=${String(hookCtx.accountId)}`);
 
       try {
         observerDb.insertMessage({
