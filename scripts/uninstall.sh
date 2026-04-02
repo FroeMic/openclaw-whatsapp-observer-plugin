@@ -8,28 +8,34 @@ CONFIG_PATH="${HOME}/.openclaw/openclaw.json"
 # --- Parse flags ---
 KEEP_FILES=false
 PURGE_CREDS=false
-MIGRATE=""  # empty = prompt, "yes" = --migrate, "no" = --no-migrate
+MIGRATE=""           # empty = prompt, "yes" = --migrate, "no" = --no-migrate
+RESTORE_WA=""        # empty = auto (check state file), "yes" = force, "no" = skip
 for arg in "$@"; do
   case "$arg" in
-    --migrate)           MIGRATE="yes" ;;
-    --no-migrate)        MIGRATE="no" ;;
-    --keep-files)        KEEP_FILES=true ;;
-    --purge-credentials) PURGE_CREDS=true ;;
+    --migrate)              MIGRATE="yes" ;;
+    --no-migrate)           MIGRATE="no" ;;
+    --keep-files)           KEEP_FILES=true ;;
+    --purge-credentials)    PURGE_CREDS=true ;;
+    --restore-whatsapp)     RESTORE_WA="yes" ;;
+    --no-restore-whatsapp)  RESTORE_WA="no" ;;
     --help|-h)
       echo "Usage: uninstall.sh [OPTIONS]"
       echo ""
       echo "Remove the WhatsApp Pro plugin from an existing openclaw installation."
       echo ""
       echo "Options:"
-      echo "  --migrate             Migrate channels.whatsapp-pro config back to channels.whatsapp"
-      echo "                        (observer-only accounts are excluded)"
-      echo "  --no-migrate          Remove channels.whatsapp-pro without migrating back"
-      echo "  --keep-files          Keep plugin files on disk (~/.openclaw/extensions/whatsapp-pro)"
-      echo "  --purge-credentials   Delete WhatsApp Web credentials (~/.openclaw/oauth/whatsapp/)"
-      echo "                        Your phone will need to be re-linked after reinstall"
-      echo "  -h, --help            Show this help"
+      echo "  --migrate              Migrate channels.whatsapp-pro config back to channels.whatsapp"
+      echo "                         (observer-only accounts are excluded)"
+      echo "  --no-migrate           Remove channels.whatsapp-pro without migrating back"
+      echo "  --restore-whatsapp     Re-enable the built-in whatsapp plugin"
+      echo "  --no-restore-whatsapp  Do not re-enable the built-in whatsapp plugin"
+      echo "  --keep-files           Keep plugin files on disk (~/.openclaw/extensions/whatsapp-pro)"
+      echo "  --purge-credentials    Delete WhatsApp Web credentials (~/.openclaw/oauth/whatsapp/)"
+      echo "                         Your phone will need to be re-linked after reinstall"
+      echo "  -h, --help             Show this help"
       echo ""
-      echo "If neither --migrate nor --no-migrate is given, you will be prompted."
+      echo "If --restore-whatsapp / --no-restore-whatsapp is not given, the script checks"
+      echo "whether whatsapp was enabled before install and only restores if it was."
       exit 0
       ;;
     *)
@@ -208,9 +214,19 @@ if $PURGE_CREDS; then
   fi
 fi
 
-# --- Re-enable built-in whatsapp plugin ---
-echo "Re-enabling built-in whatsapp plugin..."
-openclaw plugins enable whatsapp 2>/dev/null || true
+# --- Conditionally re-enable built-in whatsapp plugin ---
+STATE_FILE="${EXTENSION_DIR}/.wa-was-enabled"
+if [ "$RESTORE_WA" = "yes" ]; then
+  echo "Re-enabling built-in whatsapp plugin (--restore-whatsapp)..."
+  openclaw plugins enable whatsapp 2>/dev/null || true
+elif [ "$RESTORE_WA" = "no" ]; then
+  echo "Skipping built-in whatsapp restore (--no-restore-whatsapp)."
+elif [ -f "$STATE_FILE" ] && [ "$(cat "$STATE_FILE" 2>/dev/null)" = "yes" ]; then
+  echo "Re-enabling built-in whatsapp plugin (was enabled before install)..."
+  openclaw plugins enable whatsapp 2>/dev/null || true
+else
+  echo "Built-in whatsapp was not enabled before install, skipping restore."
+fi
 
 echo ""
 echo "Uninstalled. You can restart the gateway:"
