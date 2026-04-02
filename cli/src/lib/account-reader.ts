@@ -32,7 +32,11 @@ type RawAccountConfig = {
 };
 
 const DEFAULT_CONFIG_PATH = join(homedir(), ".openclaw", "openclaw.json");
-const DEFAULT_OAUTH_DIR = join(homedir(), ".openclaw", "oauth", "whatsapp");
+// Try both known credential paths — the SDK's resolveOAuthDir() may return either
+const CREDENTIAL_DIRS = [
+  join(homedir(), ".openclaw", "credentials", "whatsapp"),
+  join(homedir(), ".openclaw", "oauth", "whatsapp"),
+];
 
 /**
  * Read all configured accounts from openclaw.json and enrich with
@@ -108,7 +112,15 @@ function resolveAuthDir(accountId: string, configuredAuthDir?: string): string {
       ? join(homedir(), configuredAuthDir.slice(2))
       : configuredAuthDir;
   }
-  return join(DEFAULT_OAUTH_DIR, accountId);
+  // Check known credential paths, return first that exists
+  for (const dir of CREDENTIAL_DIRS) {
+    const candidate = join(dir, accountId);
+    if (existsSync(join(candidate, "creds.json"))) {
+      return candidate;
+    }
+  }
+  // Default to first path
+  return join(CREDENTIAL_DIRS[0], accountId);
 }
 
 function hasCredentials(authDir: string): boolean {
