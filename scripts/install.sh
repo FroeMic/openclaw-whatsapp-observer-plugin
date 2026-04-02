@@ -143,6 +143,39 @@ if [ -d "$EXTENSION_DIR" ]; then
   rm -rf "$EXTENSION_DIR"
 fi
 
+# --- Clean up stale whatsapp-pro config from previous installs ---
+# openclaw plugins install validates config before installing. If a previous
+# install left channels.whatsapp-pro in config but the extension dir was removed,
+# openclaw rejects it as "unknown channel id". Remove it so install succeeds.
+node -e "
+  const fs = require('fs');
+  const configPath = '$CONFIG_PATH';
+  if (!fs.existsSync(configPath)) process.exit(0);
+  const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  let changed = false;
+  if (cfg.channels?.['whatsapp-pro']) {
+    delete cfg.channels['whatsapp-pro'];
+    if (Object.keys(cfg.channels).length === 0) delete cfg.channels;
+    changed = true;
+  }
+  if (cfg.plugins?.entries?.['whatsapp-pro']) {
+    delete cfg.plugins.entries['whatsapp-pro'];
+    if (cfg.plugins.entries && Object.keys(cfg.plugins.entries).length === 0) delete cfg.plugins.entries;
+    changed = true;
+  }
+  if (Array.isArray(cfg.plugins?.allow)) {
+    const before = cfg.plugins.allow.length;
+    cfg.plugins.allow = cfg.plugins.allow.filter(id => id !== 'whatsapp-pro');
+    if (cfg.plugins.allow.length < before) changed = true;
+    if (cfg.plugins.allow.length === 0) delete cfg.plugins.allow;
+  }
+  if (cfg.plugins && Object.keys(cfg.plugins).length === 0) delete cfg.plugins;
+  if (changed) {
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
+    console.log('  Cleaned up stale whatsapp-pro config from previous install.');
+  }
+" 2>/dev/null || true
+
 # --- Install plugin ---
 echo "Installing whatsapp-pro plugin..."
 openclaw plugins install "$PLUGIN_DIR"
