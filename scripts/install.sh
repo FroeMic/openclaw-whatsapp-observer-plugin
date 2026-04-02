@@ -68,27 +68,17 @@ elif [ "$HAS_WA_CONFIG" = "no" ]; then
   MIGRATE="no"
 fi
 
-# --- Record whether built-in whatsapp was enabled before we touch it ---
-# Stored in channels.whatsapp-pro.meta.previousWhatsappEnabled so it
-# survives reinstalls and lives alongside the config.
-node -e "
+# --- Check whether built-in whatsapp was enabled (before we touch anything) ---
+WA_WAS_ENABLED=$(node -e "
   const fs = require('fs');
-  const configPath = '$CONFIG_PATH';
-  if (!fs.existsSync(configPath)) process.exit(0);
-  const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-  const hasChannel = cfg.channels?.whatsapp !== undefined;
-  const pluginDisabled = cfg.plugins?.entries?.whatsapp?.enabled === false;
-  const wasEnabled = hasChannel && !pluginDisabled;
-
-  if (!cfg.channels) cfg.channels = {};
-  if (!cfg.channels['whatsapp-pro']) cfg.channels['whatsapp-pro'] = {};
-  if (!cfg.channels['whatsapp-pro'].meta) cfg.channels['whatsapp-pro'].meta = {};
-  cfg.channels['whatsapp-pro'].meta.previousWhatsappEnabled = wasEnabled;
-
-  fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
-  console.log('Built-in whatsapp was previously enabled: ' + wasEnabled);
-" 2>/dev/null || true
+  try {
+    const cfg = JSON.parse(fs.readFileSync('$CONFIG_PATH', 'utf8'));
+    const hasChannel = cfg.channels?.whatsapp !== undefined;
+    const pluginDisabled = cfg.plugins?.entries?.whatsapp?.enabled === false;
+    console.log(hasChannel && !pluginDisabled ? 'true' : 'false');
+  } catch { console.log('false'); }
+" 2>/dev/null || echo "false")
+echo "Built-in whatsapp was previously enabled: $WA_WAS_ENABLED"
 
 # --- Migrate or disable built-in whatsapp ---
 if [ "$MIGRATE" = "yes" ]; then
@@ -162,6 +152,21 @@ openclaw plugins install "$PLUGIN_DIR"
 OPENCLAW_ROOT="$(dirname "$(readlink -f "$(which openclaw)")")"
 mkdir -p "$EXTENSION_DIR/node_modules"
 ln -sf "$OPENCLAW_ROOT" "$EXTENSION_DIR/node_modules/openclaw"
+
+# --- Save meta (after plugin is installed so openclaw knows the channel ID) ---
+node -e "
+  const fs = require('fs');
+  const configPath = '$CONFIG_PATH';
+  if (!fs.existsSync(configPath)) process.exit(0);
+  const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+  if (!cfg.channels) cfg.channels = {};
+  if (!cfg.channels['whatsapp-pro']) cfg.channels['whatsapp-pro'] = {};
+  if (!cfg.channels['whatsapp-pro'].meta) cfg.channels['whatsapp-pro'].meta = {};
+  cfg.channels['whatsapp-pro'].meta.previousWhatsappEnabled = $WA_WAS_ENABLED;
+
+  fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n');
+" 2>/dev/null || true
 
 # --- Install and link wa-pro CLI ---
 echo "Installing wa-pro CLI..."
