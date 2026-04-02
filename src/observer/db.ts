@@ -263,6 +263,46 @@ export class ObserverDB {
     return this.query(sql, binds);
   }
 
+  getHistory(params: {
+    conversationId: string;
+    accountId?: string;
+    afterDate?: number;
+    beforeDate?: number;
+    limit?: number;
+  }): Array<Record<string, unknown>> {
+    const conditions: string[] = ["conversation_id = :conversationId"];
+    const binds: Record<string, unknown> = { ":conversationId": params.conversationId };
+
+    if (params.accountId) {
+      conditions.push("account_id = :accountId");
+      binds[":accountId"] = params.accountId;
+    }
+    if (params.afterDate) {
+      conditions.push("timestamp >= :afterDate");
+      binds[":afterDate"] = params.afterDate;
+    }
+    if (params.beforeDate) {
+      conditions.push("timestamp <= :beforeDate");
+      binds[":beforeDate"] = params.beforeDate;
+    }
+
+    const limit = Math.min(params.limit ?? 100, 500);
+    const where = `WHERE ${conditions.join(" AND ")}`;
+    const sql = `
+      SELECT id, message_id, account_id, sender, sender_name,
+             sender_e164, conversation_id, is_group, group_id,
+             group_name, content, media_type, media_path,
+             timestamp, logged_at, message_type, ref_message_id, source
+      FROM messages
+      ${where}
+      ORDER BY timestamp ASC
+      LIMIT :limit
+    `;
+    binds[":limit"] = limit;
+
+    return this.query(sql, binds);
+  }
+
   listConversations(params: {
     accountId?: string;
     limit?: number;
@@ -280,6 +320,9 @@ export class ObserverDB {
     const sql = `
       SELECT
         conversation_id AS conversationId,
+        (SELECT m4.account_id FROM messages m4
+         WHERE m4.conversation_id = messages.conversation_id
+         ORDER BY m4.timestamp DESC LIMIT 1) AS accountId,
         MAX(group_name) AS groupName,
         (SELECT m3.sender_name FROM messages m3
          WHERE m3.conversation_id = messages.conversation_id

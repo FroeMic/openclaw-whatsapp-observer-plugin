@@ -46,6 +46,7 @@ export default class Recent extends Command {
       const filtered = applyRetrieveFilter(results, config.mode, config.filters).slice(0, limit);
 
       printOutput(filtered, flags.format as OutputFormat, [
+        { key: "account_id", header: "Account", width: 12 },
         { key: "timestamp", header: "Time", width: 24 },
         { key: "sender_name", header: "Sender", width: 20 },
         { key: "group_name", header: "Group", width: 20 },

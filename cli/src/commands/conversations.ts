@@ -36,6 +36,7 @@ export default class Conversations extends Command {
       });
 
       printOutput(conversations, flags.format as OutputFormat, [
+        { key: "accountId", header: "Account", width: 12 },
         { key: "conversationId", header: "Conversation", width: 35 },
         { key: "groupName", header: "Group", width: 20 },
         { key: "contactName", header: "Contact", width: 20 },
