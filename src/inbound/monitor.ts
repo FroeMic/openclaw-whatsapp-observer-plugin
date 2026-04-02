@@ -49,7 +49,6 @@ export async function monitorWebInbox(options: {
 }) {
   const inboundLogger = getChildLogger({ module: "web-inbound" });
   const inboundConsoleLog = createSubsystemLogger("gateway/channels/whatsapp-pro").child("inbound");
-  inboundConsoleLog.info(`[${options.accountId}] monitorWebInbox started (observerTap=${!!options.observerTap})`);
   const sock = await createWaSocket(false, options.verbose, {
     authDir: options.authDir,
   });
@@ -415,7 +414,6 @@ export async function monitorWebInbox(options: {
       // Observer DB tap — log every Baileys message regardless of pipeline outcome
       if (options.observerTap) {
         try {
-          inboundConsoleLog.info(`[${options.accountId}] observer tap: processing msg type=${upsert.type} remoteJid=${msg.key?.remoteJid}`);
           await processObserverMessage(msg, sock, {
             accountId: options.accountId,
             config: options.observerTap.config,
@@ -424,9 +422,8 @@ export async function monitorWebInbox(options: {
             lidLookup: sock.signalRepository?.lidMapping,
             authDir: options.authDir,
           });
-          inboundConsoleLog.info(`[${options.accountId}] observer tap: OK`);
-        } catch (tapErr) {
-          inboundConsoleLog.error(`[${options.accountId}] observer tap FAILED: ${String(tapErr)}`);
+        } catch {
+          // best-effort — don't block the agent pipeline
         }
       }
 

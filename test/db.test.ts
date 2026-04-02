@@ -504,4 +504,111 @@ describe("ObserverDB", () => {
       expect(results[0].source).toBe("pipeline");
     });
   });
+
+  describe("settings", () => {
+    it("returns undefined for missing setting", () => {
+      expect(db.getSetting("nonexistent")).toBeUndefined();
+    });
+
+    it("sets and gets a setting", () => {
+      db.setSetting("mode", "record-all-retrieve-filtered");
+      expect(db.getSetting("mode")).toBe("record-all-retrieve-filtered");
+    });
+
+    it("overwrites existing setting", () => {
+      db.setSetting("mode", "record-all-retrieve-all");
+      db.setSetting("mode", "record-filtered-retrieve-filtered");
+      expect(db.getSetting("mode")).toBe("record-filtered-retrieve-filtered");
+    });
+
+    it("deletes a setting", () => {
+      db.setSetting("key", "value");
+      db.deleteSetting("key");
+      expect(db.getSetting("key")).toBeUndefined();
+    });
+
+    it("getObserverSettings returns defaults when empty", () => {
+      const settings = db.getObserverSettings();
+      expect(settings.mode).toBe("record-all-retrieve-all");
+      expect(settings.filters.blocklist).toEqual([]);
+      expect(settings.filters.allowlist).toEqual(["*"]);
+      expect(settings.retentionDays).toBe(90);
+    });
+
+    it("getObserverSettings reads stored values", () => {
+      db.setSetting("mode", "record-all-retrieve-filtered");
+      db.setSetting("filters.blocklist", '["bad@s.whatsapp.net"]');
+      db.setSetting("filters.allowlist", '["+4917600000001"]');
+      db.setSetting("retentionDays", "30");
+
+      const settings = db.getObserverSettings();
+      expect(settings.mode).toBe("record-all-retrieve-filtered");
+      expect(settings.filters.blocklist).toEqual(["bad@s.whatsapp.net"]);
+      expect(settings.filters.allowlist).toEqual(["+4917600000001"]);
+      expect(settings.retentionDays).toBe(30);
+    });
+
+    it("seedSettings only writes when empty", () => {
+      db.seedSettings({
+        mode: "record-filtered-retrieve-filtered",
+        filters: { blocklist: ["a"], allowlist: ["b"] },
+        retentionDays: 60,
+      });
+      expect(db.getSetting("mode")).toBe("record-filtered-retrieve-filtered");
+
+      // Second seed should not overwrite
+      db.seedSettings({
+        mode: "record-all-retrieve-all",
+        filters: { blocklist: [], allowlist: ["*"] },
+        retentionDays: 90,
+      });
+      expect(db.getSetting("mode")).toBe("record-filtered-retrieve-filtered");
+    });
+
+    it("hasSettings returns false when empty, true after seed", () => {
+      expect(db.hasSettings()).toBe(false);
+      db.seedSettings({
+        mode: "record-all-retrieve-all",
+        filters: { blocklist: [], allowlist: ["*"] },
+        retentionDays: 90,
+      });
+      expect(db.hasSettings()).toBe(true);
+    });
+  });
+
+  describe("getHistory", () => {
+    it("returns messages in chronological order", () => {
+      const convId = "conv@s.whatsapp.net";
+      db.insertMessage({ messageId: "h1", accountId: "a1", sender: "s1", conversationId: convId, isGroup: false, content: "first", timestamp: 1000 });
+      db.insertMessage({ messageId: "h2", accountId: "a1", sender: "s2", conversationId: convId, isGroup: false, content: "second", timestamp: 2000 });
+      db.insertMessage({ messageId: "h3", accountId: "a1", sender: "s1", conversationId: convId, isGroup: false, content: "third", timestamp: 3000 });
+
+      const history = db.getHistory({ conversationId: convId });
+      expect(history).toHaveLength(3);
+      expect(history[0].content).toBe("first");
+      expect(history[1].content).toBe("second");
+      expect(history[2].content).toBe("third");
+    });
+
+    it("filters by date range", () => {
+      const convId = "conv@s.whatsapp.net";
+      db.insertMessage({ messageId: "d1", accountId: "a1", sender: "s1", conversationId: convId, isGroup: false, content: "old", timestamp: 1000 });
+      db.insertMessage({ messageId: "d2", accountId: "a1", sender: "s1", conversationId: convId, isGroup: false, content: "mid", timestamp: 2000 });
+      db.insertMessage({ messageId: "d3", accountId: "a1", sender: "s1", conversationId: convId, isGroup: false, content: "new", timestamp: 3000 });
+
+      const history = db.getHistory({ conversationId: convId, afterDate: 1500, beforeDate: 2500 });
+      expect(history).toHaveLength(1);
+      expect(history[0].content).toBe("mid");
+    });
+
+    it("filters by account", () => {
+      const convId = "conv@s.whatsapp.net";
+      db.insertMessage({ messageId: "a1", accountId: "acc1", sender: "s1", conversationId: convId, isGroup: false, content: "from acc1", timestamp: 1000 });
+      db.insertMessage({ messageId: "a2", accountId: "acc2", sender: "s1", conversationId: convId, isGroup: false, content: "from acc2", timestamp: 2000 });
+
+      const history = db.getHistory({ conversationId: convId, accountId: "acc1" });
+      expect(history).toHaveLength(1);
+      expect(history[0].content).toBe("from acc1");
+    });
+  });
 });
